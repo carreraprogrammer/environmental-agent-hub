@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  agent-hub:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: agent-hub-dev
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    volumes:
+      # Mount source code for hot reload
+      - ../app:/app/app
+      - ../config:/app/config
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
