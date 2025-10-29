@@ -109,6 +109,22 @@ async def root() -> dict[str, str]:
     }
 
 
+@app.get("/health")
+async def health_check_direct():
+    """
+    Direct health check endpoint (backup).
+    
+    Returns:
+        dict: Health status information
+    """
+    return {
+        "status": "healthy",
+        "service": "agent-hub",
+        "version": "2.0.0",
+        "message": "Service is running"
+    }
+
+
 # Import routers (futuro)
 # from app.api.endpoints import classify, models
 # app.include_router(classify.router)
