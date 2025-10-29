@@ -113,15 +113,31 @@ async def root() -> dict[str, str]:
 async def health_check_direct():
     """
     Direct health check endpoint (backup).
-    
-    Returns:
-        dict: Health status information
+    Ultra-simple health check that just returns OK.
     """
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+async def readiness_check():
+    """
+    Readiness check endpoint.
+    """
+    return {"ready": True, "status": "healthy"}
+
+
+@app.get("/debug")
+async def debug_info():
+    """
+    Debug endpoint to see environment info.
+    """
+    import os
+    import sys
     return {
-        "status": "healthy",
-        "service": "agent-hub",
-        "version": "2.0.0",
-        "message": "Service is running"
+        "python_version": sys.version,
+        "environment": dict(os.environ),
+        "working_directory": os.getcwd(),
+        "status": "debug_ok"
     }
 
 
