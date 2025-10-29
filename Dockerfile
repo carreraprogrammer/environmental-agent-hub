@@ -18,9 +18,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code and startup script
 COPY app/ ./app/
 COPY config/ ./config/
+COPY start.sh ./start.sh
+
+# Make startup script executable
+RUN chmod +x start.sh
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -29,5 +33,5 @@ ENV PYTHONUNBUFFERED=1 \
 # Expose port (Railway will set $PORT)
 EXPOSE 8000
 
-# Start command directly - simple and robust
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info
+# Use startup script
+CMD ["./start.sh"]
