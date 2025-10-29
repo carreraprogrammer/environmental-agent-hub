@@ -5,7 +5,7 @@ Classifier factory placeholder.
 from __future__ import annotations
 
 from app.adapters.anthropic_adapter import AnthropicAdapter
-from app.adapters.base import ClassifierAdapter, AdapterNotConfiguredError
+from app.adapters.base import AdapterNotConfiguredError, ClassifierAdapter
 from app.adapters.google_adapter import GoogleAdapter
 from app.adapters.openai_adapter import OpenAIAdapter
 from app.adapters.roboflow_adapter import RoboflowAdapter

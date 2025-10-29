@@ -6,10 +6,11 @@ Provides reusable dependencies for request handling.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+# from collections.abc import AsyncGenerator
+from typing import Generator
 
 
-def get_request_id() -> AsyncGenerator[str, None]:
+def get_request_id() -> Generator[str, None, None]:
     """
     Placeholder dependency for generating request identifiers.
     
