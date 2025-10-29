@@ -33,5 +33,5 @@ ENV PYTHONUNBUFFERED=1 \
 # Expose port (Railway will set $PORT)
 EXPOSE 8000
 
-# Use startup script
-CMD ["./start.sh"]
+# Use startup script as entrypoint to ensure env var expansion
+ENTRYPOINT ["/app/start.sh"]
