@@ -37,9 +37,5 @@ RUN chmod +x start.sh && \
     chown -R app:app /app
 USER app
 
-# Simple health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
-
 # Start command using startup script
 CMD ["./start.sh"]

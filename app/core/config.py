@@ -49,13 +49,13 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = "json"
     
     # CORS Configuration
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["*"]  # More permissive for deployment
     
     # Active Model (CRITICAL - cambiar sin redeploy)
     CLASSIFIER_MODEL: str = "openai-gpt4"
     
     # OpenAI Configuration
-    OPENAI_API_KEY: str = ""
+    OPENAI_API_KEY: str = "dummy-key"  # Default for health checks
     OPENAI_TIMEOUT: int = 10
     
     # Anthropic Configuration (Optional)

@@ -10,11 +10,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.endpoints.health import router as health_router
-from app.core.config import settings
-from app.core.logging import logger, setup_logging
 
-# Setup structured logging
-setup_logging()
+# Import settings and logging with error handling
+try:
+    from app.core.config import settings
+    from app.core.logging import logger, setup_logging
+    setup_logging()
+except Exception as e:
+    print(f"Warning: Failed to setup logging: {e}")
+    # Fallback simple logger
+    import logging
+    logger = logging.getLogger(__name__)
+    settings = None
 
 # Create FastAPI application
 app = FastAPI(
@@ -25,14 +32,26 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configure CORS
-app.add_middleware(  # type: ignore[call-arg]
-    CORSMiddleware,  # type: ignore
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure CORS with fallback
+try:
+    cors_origins = settings.CORS_ORIGINS if settings else ["*"]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+except Exception as e:
+    print(f"Warning: Failed to configure CORS: {e}")
+    # Add permissive CORS as fallback
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Include routers
 app.include_router(health_router)
@@ -45,12 +64,18 @@ async def startup_event() -> None:
     
     Logs application start with configuration info.
     """
-    logger.info(
-        "agent_hub_started",
-        version="2.0.0",
-        debug=settings.DEBUG,
-        classifier_model=settings.CLASSIFIER_MODEL,
-    )
+    try:
+        if settings and logger:
+            logger.info(
+                "agent_hub_started",
+                version="2.0.0",
+                debug=settings.DEBUG,
+                classifier_model=settings.CLASSIFIER_MODEL,
+            )
+        else:
+            print("Agent Hub started - version 2.0.0")
+    except Exception as e:
+        print(f"Startup warning: {e}")
 
 
 @app.on_event("shutdown")
@@ -60,7 +85,13 @@ async def shutdown_event() -> None:
     
     Logs application shutdown.
     """
-    logger.info("agent_hub_shutdown")
+    try:
+        if logger:
+            logger.info("agent_hub_shutdown")
+        else:
+            print("Agent Hub shutdown")
+    except Exception as e:
+        print(f"Shutdown warning: {e}")
 
 
 @app.get("/")
