@@ -1,0 +1,53 @@
+[MASTER]
+# Use multiple processes to speed up Pylint
+jobs=4
+
+# Python code to execute, usually for sys.path manipulation
+init-hook='import sys; sys.path.append(".")'
+
+[MESSAGES CONTROL]
+# Disable specific messages
+disable=
+    C0111,  # missing-docstring (manejado por convención)
+    C0103,  # invalid-name (permite snake_case flexible)
+    R0903,  # too-few-public-methods (permite data classes)
+    R0913,  # too-many-arguments (común en constructores)
+    W0212,  # protected-access (permite en tests)
+    W0613,  # unused-argument (común en callbacks)
+    C0330,  # bad-continuation (conflicto con black)
+    C0326,  # bad-whitespace (conflicto con black)
+
+[FORMAT]
+# Maximum number of characters on a single line
+max-line-length=100
+
+# String used as indentation unit (4 spaces)
+indent-string='    '
+
+[BASIC]
+# Good variable names
+good-names=i,j,k,ex,_,id,db,pk,df
+
+# Regular expression matching correct function names
+function-rgx=[a-z_][a-z0-9_]{2,50}$
+
+# Regular expression matching correct method names
+method-rgx=[a-z_][a-z0-9_]{2,50}$
+
+# Regular expression matching correct constant names
+const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
+
+[DESIGN]
+# Maximum number of attributes for a class
+max-attributes=12
+
+# Maximum number of public methods for a class
+max-public-methods=25
+
+[SIMILARITIES]
+# Minimum lines number of a similarity
+min-similarity-lines=6
+
+[IMPORTS]
+# Deprecated modules which should not be used
+deprecated-modules=optparse,imp

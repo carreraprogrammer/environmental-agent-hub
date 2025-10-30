@@ -1,0 +1,6 @@
+# Model configurations
+# Active model determined by CLASSIFIER_MODEL env var
+
+models: {}
+
+# To be populated in future tickets
