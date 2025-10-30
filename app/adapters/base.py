@@ -1,28 +1,36 @@
-"""
-Base classes for classifier adapters (placeholder).
-"""
+"""Base classes for classifier adapters."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Final
+
+from app.schemas.domain import ClassificationResult
 
 
 class ClassifierAdapter(ABC):
-    """
-    Abstract base class for classifier adapters.
-    """
+    """Abstract base class for classifier adapters."""
+
+    DEFAULT_TRACE_KEY: Final[str] = "trace_id"
 
     @abstractmethod
-    def classify(self, payload: dict[str, object]) -> dict[str, object]:
-        """
-        Classify the given payload.
-        
-        Args:
-            payload: Input payload for classification
-        
-        Returns:
-            dict: Classification result
-        """
+    async def classify(self, image_url: str, *, trace_id: str | None = None) -> ClassificationResult:
+        """Classify a waste material from an image URL."""
+
+    @property
+    @abstractmethod
+    def model_name(self) -> str:
+        """Return the fully qualified model name."""
+
+    @property
+    @abstractmethod
+    def model_provider(self) -> str:
+        """Return the provider name for the adapter."""
+
+    @property
+    @abstractmethod
+    def cost_per_request(self) -> float:
+        """Return the estimated cost per request in USD."""
 
 
 class AdapterNotConfiguredError(RuntimeError):
