@@ -14,7 +14,9 @@ class ClassifierAdapter(ABC):
     DEFAULT_TRACE_KEY: Final[str] = "trace_id"
 
     @abstractmethod
-    async def classify(self, image_url: str, *, trace_id: str | None = None) -> ClassificationResult:
+    async def classify(
+        self, image_url: str, *, trace_id: str | None = None
+    ) -> ClassificationResult:
         """Classify a waste material from an image URL."""
 
     @property
@@ -41,7 +43,7 @@ class AdapterNotConfiguredError(RuntimeError):
     def __init__(self, adapter_name: str) -> None:
         """
         Initialize the error.
-        
+
         Args:
             adapter_name: Name of the adapter
         """

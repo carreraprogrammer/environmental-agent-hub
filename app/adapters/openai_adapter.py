@@ -21,9 +21,7 @@ class OpenAIClassifierAdapter(ClassifierAdapter):
     def __init__(self, model: str | None = None) -> None:
         self.model = (model or settings.OPENAI_MODEL).strip()
         if self.model not in _ALLOWED_MODELS:
-            raise ValueError(
-                "OpenAI model must be one of 'gpt-4-vision-preview' or 'gpt-4o'"
-            )
+            raise ValueError("OpenAI model must be one of 'gpt-4-vision-preview' or 'gpt-4o'")
 
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 

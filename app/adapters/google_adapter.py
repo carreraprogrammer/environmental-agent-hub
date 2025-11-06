@@ -92,7 +92,10 @@ class GoogleClassifierAdapter(ClassifierAdapter):
         self._daily_requests += 1
 
     async def _download_image(self, url: str, bound_logger) -> dict[str, bytes | str]:
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        async with httpx.AsyncClient(timeout=20.0, headers=headers, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
             content_length = response.headers.get("content-length")

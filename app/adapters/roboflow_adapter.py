@@ -36,11 +36,18 @@ class RoboflowClassifierAdapter(ClassifierAdapter):
         bound_logger = logger.bind(trace_id=trace_id, adapter="roboflow")
         bound_logger.info("roboflow_request", image_url=image_url, model_id=self.model_id)
 
-        prediction = await asyncio.to_thread(
-            self.model.predict,
-            image_url,
-            confidence=settings.ROBOFLOW_CONFIDENCE_THRESHOLD,
-        )
+        # Roboflow needs the actual URL string - it handles the download internally
+        # But we need to check if it's a valid URL that Roboflow can access
+        try:
+            prediction = await asyncio.to_thread(
+                self.model.predict,
+                image_url,
+                hosted=True,  # Indicates it's a hosted URL
+            )
+        except Exception as e:
+            # If hosted fails, log the error
+            bound_logger.error("roboflow_prediction_failed", error=str(e))
+            raise
 
         predictions = getattr(prediction, "predictions", None) or []
         if not predictions:

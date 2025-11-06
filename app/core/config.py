@@ -32,7 +32,7 @@ class Settings(BaseSettings):
         default="changeme-openai",
         description="OpenAI API key",
     )
-    OPENAI_MODEL: str = Field(default="gpt-4-vision-preview")
+    OPENAI_MODEL: str = Field(default="gpt-4o")
     OPENAI_TIMEOUT: int = Field(default=30, ge=5, le=60)
     OPENAI_MAX_RETRIES: int = Field(default=3, ge=1, le=5)
 
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
         default="changeme-google",
         description="Google Gemini API key",
     )
-    GOOGLE_MODEL: str = Field(default="gemini-pro-vision")
+    GOOGLE_MODEL: str = Field(default="gemini-2.5-flash")
     GOOGLE_RATE_LIMIT_PER_MIN: int = Field(default=50, ge=1, le=60)
     GOOGLE_DAILY_LIMIT: int = Field(default=1400, ge=1, le=1500)
 
