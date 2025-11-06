@@ -1,10 +1,10 @@
 # Agent Hub - AI Orchestrator
 
-Waste classification system with interchangeable AI models (GPT-4, Gemini, Roboflow).
+Waste classification system with interchangeable AI models (GPT-4, Claude, Gemini).
 
 ## 🎯 Features
 
-- **Interchangeable Models**: Switch between GPT-4, Gemini, Roboflow without code changes
+- **Interchangeable Models**: Switch between GPT-4, Claude, Gemini without code changes
 - **DDD Architecture**: Clean, maintainable, extensible codebase
 - **Fast**: <2s p95 latency end-to-end
 - **Cost-Effective**: Optimized for <$0.015 per classification
@@ -15,7 +15,7 @@ Waste classification system with interchangeable AI models (GPT-4, Gemini, Robof
 
 - **Runtime**: Python 3.11+
 - **Framework**: FastAPI 0.104+
-- **AI Providers**: OpenAI, Google Gemini, Roboflow
+- **AI Providers**: OpenAI, Anthropic, Google
 - **Deployment**: Docker + Railway
 - **Logging**: structlog (JSON)
 
@@ -25,7 +25,7 @@ Waste classification system with interchangeable AI models (GPT-4, Gemini, Robof
 - Docker & Docker Compose (optional)
 - Railway CLI (for deployment)
 - OpenAI API Key (required)
-- Roboflow API Key (optional)
+- Anthropic API Key (optional)
 
 ## 🚀 Quick Start
 
@@ -153,33 +153,11 @@ agent-hub/
 
 ## 🔧 Configuration
 
-### Model Configuration
-
-Configure provider credentials and model selection in `.env`:
-
-```bash
-# Active classifier model
-# Options: openai-gpt4, openai-gpt4o, gemini, roboflow
-CLASSIFIER_MODEL=openai-gpt4o
-
-# OpenAI
-OPENAI_API_KEY=sk-...
-
-# Google Gemini
-GOOGLE_API_KEY=...
-
-# Roboflow (workspace/project/version)
-ROBOFLOW_API_KEY=...
-ROBOFLOW_MODEL_ID=environmental-agent-hub/waste-classifier/1
-```
-
-Roboflow setup: create a project in your Roboflow workspace, publish a version, and set `ROBOFLOW_MODEL_ID` as `workspace/project/version` (e.g., `environmental-agent-hub/waste-classifier/1`).
-
 ### Switch Classification Model
 
 Edit `.env`:
 ```bash
-# Options: openai-gpt4, openai-gpt4o, gemini, roboflow
+# Options: openai-gpt4, openai-gpt4o, claude, gemini
 CLASSIFIER_MODEL=openai-gpt4o
 ```
 
