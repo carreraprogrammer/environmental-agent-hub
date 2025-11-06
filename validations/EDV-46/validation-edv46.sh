@@ -7,15 +7,49 @@ echo "  VALIDACIÓN EDV-46: Core Classifier Adapters Implementation"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
+# Detectar y activar virtual environment si existe
+if [ -f "venv/bin/activate" ]; then
+    echo "🔍 Detectando virtual environment..."
+    source venv/bin/activate
+    echo "✅ Virtual environment activado"
+elif [ -f ".venv/bin/activate" ]; then
+    echo "🔍 Detectando virtual environment..."
+    source .venv/bin/activate
+    echo "✅ Virtual environment activado"
+fi
+
 # Información del sistema
+echo ""
 echo "🖥️  INFORMACIÓN DEL SISTEMA:"
 echo "   Fecha: $(date)"
 echo "   Directorio: $(pwd)"
 echo "   Usuario: $(whoami)"
-PY=$(command -v python || command -v python3 || echo "")
-PIP=$(command -v pip || command -v pip3 || echo "")
+
+# Usar Python del venv si está disponible
+if [ -f "venv/bin/python" ]; then
+    PY="venv/bin/python"
+    PIP="venv/bin/pip"
+elif [ -f ".venv/bin/python" ]; then
+    PY=".venv/bin/python"
+    PIP=".venv/bin/pip"
+else
+    PY=$(command -v python || command -v python3 || echo "")
+    PIP=$(command -v pip || command -v pip3 || echo "")
+fi
+
 echo "   Python: $([ -n "$PY" ] && $PY --version 2>/dev/null || echo 'No instalado')"
+echo "   Python path: $PY"
 echo "   Pip: $([ -n "$PIP" ] && $PIP --version 2>/dev/null || echo 'No instalado')"
+
+# Configurar pytest del venv
+if [ -f "venv/bin/pytest" ]; then
+    PYTEST="venv/bin/pytest"
+elif [ -f ".venv/bin/pytest" ]; then
+    PYTEST=".venv/bin/pytest"
+else
+    PYTEST=$(command -v pytest || echo "")
+fi
+echo "   Pytest: $([ -n "$PYTEST" ] && echo $PYTEST || echo 'No encontrado')"
 echo ""
 
 # Verificar que estamos en el directorio correcto
@@ -243,7 +277,7 @@ section "3️⃣  TESTS UNITARIOS (CON MOCKS)"
 
 echo "Ejecutando tests unitarios de OpenAI Adapter:"
 OPENAI_TEST_LOG="/tmp/test-openai-$(date +%s).log"
-if pytest tests/unit/test_openai_adapter.py -v --tb=short > "$OPENAI_TEST_LOG" 2>&1; then
+if $PYTEST tests/unit/test_openai_adapter.py -v --tb=short > "$OPENAI_TEST_LOG" 2>&1; then
     echo -e "${GREEN}✅${NC} OpenAI Adapter tests PASSED"
     ((PASS++))
     
@@ -262,7 +296,7 @@ fi
 echo ""
 echo "Ejecutando tests unitarios de Google Adapter:"
 GOOGLE_TEST_LOG="/tmp/test-google-$(date +%s).log"
-if pytest tests/unit/test_google_adapter.py -v --tb=short > "$GOOGLE_TEST_LOG" 2>&1; then
+if $PYTEST tests/unit/test_google_adapter.py -v --tb=short > "$GOOGLE_TEST_LOG" 2>&1; then
     echo -e "${GREEN}✅${NC} Google Adapter tests PASSED"
     ((PASS++))
     
@@ -280,7 +314,7 @@ fi
 echo ""
 echo "Ejecutando tests unitarios de Roboflow Adapter:"
 ROBOFLOW_TEST_LOG="/tmp/test-roboflow-$(date +%s).log"
-if pytest tests/unit/test_roboflow_adapter.py -v --tb=short > "$ROBOFLOW_TEST_LOG" 2>&1; then
+if $PYTEST tests/unit/test_roboflow_adapter.py -v --tb=short > "$ROBOFLOW_TEST_LOG" 2>&1; then
     echo -e "${GREEN}✅${NC} Roboflow Adapter tests PASSED"
     ((PASS++))
     
@@ -299,7 +333,7 @@ fi
 echo ""
 echo "Verificando coverage de tests unitarios:"
 COVERAGE_LOG="/tmp/coverage-edv46-$(date +%s).log"
-if pytest tests/unit/ --cov=app/adapters --cov-report=term > "$COVERAGE_LOG" 2>&1; then
+if $PYTEST tests/unit/ --cov=app/adapters --cov-report=term > "$COVERAGE_LOG" 2>&1; then
     COVERAGE_PERCENT=$(grep -oP "TOTAL.*\K\d+(?=%)" "$COVERAGE_LOG" | tail -1)
     
     if [ -n "$COVERAGE_PERCENT" ]; then
@@ -346,7 +380,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     INTEGRATION_LOG="/tmp/integration-edv46-$(date +%s).log"
     
     # Timeout de 60 segundos para tests de integración
-    if timeout 60 pytest tests/integration/test_adapters_integration.py -v --tb=short > "$INTEGRATION_LOG" 2>&1; then
+    if timeout 60 $PYTEST tests/integration/test_adapters_integration.py -v --tb=short > "$INTEGRATION_LOG" 2>&1; then
         echo -e "${GREEN}✅${NC} Tests de integración PASSED"
         ((PASS++))
         

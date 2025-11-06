@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import io
 from collections import deque
 from datetime import datetime, timedelta
 from typing import ClassVar, Deque
 
 import google.generativeai as genai
 import httpx
+from PIL import Image
 
 from app.adapters.base import ClassifierAdapter
 from app.core.config import settings
@@ -31,15 +33,20 @@ class GoogleClassifierAdapter(ClassifierAdapter):
         self.model = genai.GenerativeModel(self.model_name_internal)
 
     async def classify(
-        self, image_url: str, *, trace_id: str | None = None
+        self, image: bytes | str, *, trace_id: str | None = None
     ) -> ClassificationResult:
         bound_logger = logger.bind(trace_id=trace_id, adapter="google")
         await self._wait_for_rate_limit(bound_logger)
 
-        image_part = await self._download_image(image_url, bound_logger)
+        # Prepare image part based on input type
+        image_part = await self._prepare_image(image, bound_logger)
         prompt = self._prepare_prompt()
 
-        bound_logger.info("google_request", image_url=image_url, model=self.model_name_internal)
+        bound_logger.info(
+            "google_request",
+            image_type="bytes" if isinstance(image, bytes) else "url",
+            model=self.model_name_internal,
+        )
         try:
             response = await self.model.generate_content_async([prompt, image_part])
         except Exception as exc:  # pragma: no cover - SDK specific errors
@@ -90,6 +97,29 @@ class GoogleClassifierAdapter(ClassifierAdapter):
     def _register_request(self) -> None:
         self._request_timestamps.append(datetime.now())
         self._daily_requests += 1
+
+    async def _prepare_image(
+        self, image: bytes | str, bound_logger
+    ) -> Image.Image | dict[str, bytes | str]:
+        """
+        Prepare image for Gemini API.
+
+        Args:
+            image: Raw image bytes or URL string
+            bound_logger: Logger with context
+
+        Returns:
+            PIL Image (from bytes) or dict with mime_type and data (from URL)
+        """
+        if isinstance(image, bytes):
+            # Convert bytes to PIL Image directly
+            if len(image) > _MAX_IMAGE_SIZE_BYTES:
+                raise ValueError("Image exceeds 10MB limit for Gemini")
+            bound_logger.info("google_image_from_bytes", size_bytes=len(image))
+            return Image.open(io.BytesIO(image))
+        else:
+            # Download from URL (legacy)
+            return await self._download_image(image, bound_logger)
 
     async def _download_image(self, url: str, bound_logger) -> dict[str, bytes | str]:
         headers = {

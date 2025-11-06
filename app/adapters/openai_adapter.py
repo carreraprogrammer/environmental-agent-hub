@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from typing import Final
 
 from openai import APIError, APITimeoutError, AsyncOpenAI, RateLimitError
@@ -26,18 +27,21 @@ class OpenAIClassifierAdapter(ClassifierAdapter):
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     async def classify(
-        self, image_url: str, *, trace_id: str | None = None
+        self, image: bytes | str, *, trace_id: str | None = None
     ) -> ClassificationResult:
         bound_logger = logger.bind(trace_id=trace_id, adapter="openai")
         prompt = self._prepare_prompt()
         attempt_error: Exception | None = None
+
+        # Convert bytes to base64 data URL if needed
+        image_url = self._prepare_image(image)
 
         for attempt in range(settings.OPENAI_MAX_RETRIES):
             try:
                 bound_logger.info(
                     "openai_request",
                     attempt=attempt + 1,
-                    image_url=image_url,
+                    image_type="bytes" if isinstance(image, bytes) else "url",
                     model=self.model,
                 )
                 response = await asyncio.wait_for(
@@ -102,6 +106,22 @@ class OpenAIClassifierAdapter(ClassifierAdapter):
             model_provider=self.model_provider,
             raw_response=content,
         )
+
+    def _prepare_image(self, image: bytes | str) -> str:
+        """
+        Convert image to format expected by OpenAI API.
+
+        Args:
+            image: Raw image bytes or URL string
+
+        Returns:
+            URL string (either original or base64 data URL)
+        """
+        if isinstance(image, bytes):
+            # Convert to base64 data URL
+            base64_image = base64.b64encode(image).decode("utf-8")
+            return f"data:image/jpeg;base64,{base64_image}"
+        return image  # Already a URL
 
     def _prepare_prompt(self) -> str:
         return (

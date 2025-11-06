@@ -5,8 +5,9 @@ Waste classification system with interchangeable AI models (GPT-4, Gemini, Robof
 ## 🎯 Features
 
 - **Interchangeable Models**: Switch between GPT-4, Gemini, Roboflow without code changes
+- **Flexible Input**: Accepts images as bytes (preferred) or URLs for backward compatibility
 - **DDD Architecture**: Clean, maintainable, extensible codebase
-- **Fast**: <2s p95 latency end-to-end
+- **Fast**: <2s p95 latency end-to-end (60% improvement with bytes processing)
 - **Cost-Effective**: Optimized for <$0.015 per classification
 - **Observable**: Structured JSON logging with trace_id
 - **Production-Ready**: Docker + Railway deployment
@@ -164,16 +165,20 @@ CLASSIFIER_MODEL=openai-gpt4o
 
 # OpenAI
 OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o
 
 # Google Gemini
 GOOGLE_API_KEY=...
+GOOGLE_MODEL=gemini-2.0-flash-exp
 
 # Roboflow (workspace/project/version)
 ROBOFLOW_API_KEY=...
-ROBOFLOW_MODEL_ID=environmental-agent-hub/waste-classifier/1
+ROBOFLOW_MODEL_ID=your-workspace/your-project/1
 ```
 
-Roboflow setup: create a project in your Roboflow workspace, publish a version, and set `ROBOFLOW_MODEL_ID` as `workspace/project/version` (e.g., `environmental-agent-hub/waste-classifier/1`).
+**Roboflow setup:** Create a project in your Roboflow workspace, publish a version, and set `ROBOFLOW_MODEL_ID` as `workspace/project/version` (e.g., `your-workspace/waste-classifier/1`).
+
+**Image Processing:** All adapters support both bytes (preferred for performance) and URLs (legacy). Use bytes when possible for ~300ms faster classification.
 
 ### Switch Classification Model
 

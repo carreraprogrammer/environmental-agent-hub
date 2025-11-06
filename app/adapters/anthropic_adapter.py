@@ -10,7 +10,7 @@ class AnthropicAdapter(ClassifierAdapter):
     """Placeholder adapter returning static responses."""
 
     async def classify(
-        self, image_url: str, *, trace_id: str | None = None
+        self, image: bytes | str, *, trace_id: str | None = None
     ) -> ClassificationResult:
         return ClassificationResult(
             material=WasteMaterial.OTHER,

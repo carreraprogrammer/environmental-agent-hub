@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import tempfile
+from pathlib import Path
 
 from roboflow import Roboflow
 
@@ -31,23 +33,34 @@ class RoboflowClassifierAdapter(ClassifierAdapter):
         logger.info("roboflow_adapter_initialized", model_id=self.model_id)
 
     async def classify(
-        self, image_url: str, *, trace_id: str | None = None
+        self, image: bytes | str, *, trace_id: str | None = None
     ) -> ClassificationResult:
         bound_logger = logger.bind(trace_id=trace_id, adapter="roboflow")
-        bound_logger.info("roboflow_request", image_url=image_url, model_id=self.model_id)
+        bound_logger.info(
+            "roboflow_request",
+            image_type="bytes" if isinstance(image, bytes) else "url",
+            model_id=self.model_id,
+        )
 
-        # Roboflow needs the actual URL string - it handles the download internally
-        # But we need to check if it's a valid URL that Roboflow can access
+        # Prepare image for Roboflow API
+        image_path, temp_file = await self._prepare_image(image, bound_logger)
+
         try:
-            prediction = await asyncio.to_thread(
-                self.model.predict,
-                image_url,
-                hosted=True,  # Indicates it's a hosted URL
-            )
+            # Roboflow can accept local file path or URL
+            if isinstance(image, bytes):
+                prediction = await asyncio.to_thread(self.model.predict, image_path)
+            else:
+                prediction = await asyncio.to_thread(
+                    self.model.predict, image_path, hosted=True
+                )
         except Exception as e:
-            # If hosted fails, log the error
             bound_logger.error("roboflow_prediction_failed", error=str(e))
             raise
+        finally:
+            # Clean up temp file if created
+            if temp_file:
+                temp_file.close()
+                Path(temp_file.name).unlink(missing_ok=True)
 
         predictions = getattr(prediction, "predictions", None) or []
         if not predictions:
@@ -79,6 +92,38 @@ class RoboflowClassifierAdapter(ClassifierAdapter):
             model_provider=self.model_provider,
             raw_response=class_name,
         )
+
+    async def _prepare_image(
+        self, image: bytes | str, bound_logger
+    ) -> tuple[str, tempfile.NamedTemporaryFile | None]:
+        """
+        Prepare image for Roboflow API.
+
+        Args:
+            image: Raw image bytes or URL string
+            bound_logger: Logger with context
+
+        Returns:
+            Tuple of (image_path, temp_file_handle)
+            - For bytes: (temp_file_path, temp_file_handle)
+            - For URL: (url_string, None)
+        """
+        if isinstance(image, bytes):
+            # Create temporary file for bytes
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix=".jpg", delete=False, mode="wb"
+            )
+            temp_file.write(image)
+            temp_file.flush()
+            bound_logger.info(
+                "roboflow_image_from_bytes",
+                size_bytes=len(image),
+                temp_path=temp_file.name,
+            )
+            return temp_file.name, temp_file
+        else:
+            # Return URL directly
+            return image, None
 
     def _map_roboflow_class(self, class_name: str) -> WasteMaterial:
         normalized = class_name.lower()

@@ -83,12 +83,11 @@ Definir el **alcance funcional del Agent Hub** para: (a) orquestar agentes de IA
 **RF-003**: El sistema DEBE clasificar residuos en categorías predefinidas usando modelos intercambiables
 - **Categorías**: `PLASTIC`, `PAPER`, `GLASS`, `METAL`, `ORGANIC`, `OTHER`
 - **Arquitectura**: Adapter Pattern (interface común para todos los modelos)
+- **Input**: Imagen como `bytes` (preferido para performance) o `URL` (legacy/backward compatible)
 - **Modelos soportados MVP**:
-  - **GPT-4 Vision Preview** (OpenAI) - Baseline: $0.010/imagen, latencia ~1000ms
-  - **GPT-4o** (OpenAI) - Económico: $0.005/imagen, latencia ~600ms
-  - **Claude 3.5 Sonnet** (Anthropic) - Alternativa: $0.008/imagen, latencia ~800ms
-  - **Gemini Pro Vision** (Google) - Futuro: $0.002/imagen, latencia ~700ms
-  - **Roboflow Custom** (Roboflow) - Futuro especializado: $0.001/imagen, latencia ~300ms
+  - **GPT-4o** (OpenAI) - Preferido: $0.005/imagen, latencia ~600ms (base64 native support)
+  - **Gemini 2.0 Flash** (Google) - Alternativa: $0.00/imagen, latencia ~700ms (PIL.Image support)
+  - **Roboflow Custom** (Roboflow) - Especializado: $0.001/imagen, latencia ~300ms
 - **Output**: `{material: string, confidence: float, model_used: string}`
 - **Criterio de aceptación**:
   - ✅ Confidence score entre 0.0 - 1.0
@@ -96,6 +95,8 @@ Definir el **alcance funcional del Agent Hub** para: (a) orquestar agentes de IA
   - ✅ Material válido o fallback a "OTHER"
   - ✅ Switching de modelo mediante configuración (ENV var o config file)
   - ✅ Telemetría registra modelo usado en cada request
+  - ✅ Adapters aceptan bytes O URLs (backward compatible)
+- **Performance**: Procesamiento desde bytes reduce latencia ~300ms vs URL (elimina download)
 
 **RF-004**: El sistema DEBE aplicar threshold de confianza
 - **Regla**: Si `confidence < 0.6` → clasificar como "OTHER"
@@ -691,7 +692,11 @@ Exporta métricas de logs a CSV:
 # Pseudocódigo (detalle en architecture-spec)
 class ClassifierAdapter(ABC):
     @abstractmethod
-    async def classify(image_url: str) -> ClassificationResult
+    async def classify(image: bytes | str) -> ClassificationResult
+        """
+        Classify from bytes (preferred) or URL (legacy).
+        Bytes format reduces latency ~300ms by eliminating download step.
+        """
     
     @property
     @abstractmethod
