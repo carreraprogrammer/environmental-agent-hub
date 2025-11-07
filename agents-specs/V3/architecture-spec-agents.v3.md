@@ -1,27 +1,35 @@
 # Agent Hub – Architecture Specification V3.0 (Technical Design)
 
-## ⚠️ CONTEXTO
+## ⚠️ CONTEXTO - Tesis Ingeniería Ambiental
 
 **Este documento especifica la arquitectura técnica del Agent Hub Python.**
+
+**Propósito Principal (Tesis):**
+Sistema de recolección de **datos ambientales** para investigación en gestión de residuos universitarios. La arquitectura técnica es un **medio**, no el fin - herramienta para lograr objetivos ambientales.
+
+**Objetivos Ambientales:**
+1. Recolectar datos: tipo, volumen, peso, ubicación, fecha de residuos
+2. Educación: retroalimentación inmediata a usuarios
+3. Análisis: datos estructurados para toma de decisiones ambientales
+4. Impacto: cuantificar CO₂ evitado, recursos ahorrados
 
 **Stack acordado:**
 - Runtime: Python 3.11+
 - Framework: FastAPI 0.104+
 - Orquestación: Custom Pipeline (secuencial síncrono)
-- LLM: OpenAI API, Google API, Roboflow API
+- LLM: OpenAI API, Google API, Roboflow API (experimentación técnica)
 - Deploy: Railway/Render (Docker)
 - Storage: S3 (upload asíncrono en background)
 
-**Principios arquitectónicos:**
+**Principios arquitectónicos (soporte técnico):**
 - ✅ SOLID principles
-- ✅ Adapter Pattern para modelos intercambiables
-- ✅ Factory Pattern para instanciar clasificadores
+- ✅ Adapter Pattern para modelos intercambiables (experimentación)
 - ✅ Dependency Injection
 - ✅ Stateless agents
-- ✅ Fail-fast validation
-- ✅ Logs estructurados JSON
-- ✅ **NUEVO:** Bytes-first processing (60% mejora performance)
-- ✅ **NUEVO:** Pipeline expandido (10 agentes especializados)
+- ✅ Fail-fast validation (calidad de datos ambientales)
+- ✅ Logs estructurados JSON (trazabilidad de datos)
+- ✅ Bytes-first processing (performance)
+- ✅ Pipeline expandido (10 agentes especializados)
 
 ---
 

@@ -30,46 +30,90 @@ Frontend (React/Ionic PWA) → **Agent Hub (Python)** → Backend Rails API
 
 ---
 
-## 0) Propósito V3.0
+## 0) Propósito V3.0 - Tesis Ingeniería Ambiental
 
-Definir el **alcance funcional del Agent Hub** para: (a) orquestar agentes de IA que clasifiquen residuos desde imágenes con **latencia <2s** y **costo <$0.025**; (b) **generar TODOS los datos necesarios** para que el Backend Rails calcule impacto ambiental preciso; (c) prevenir uso malicioso mediante validación temprana; (d) permitar experimentación científica comparando múltiples modelos de clasificación; **(e) NUEVO: estimar volumen, peso y subtipo para integración completa con sistema ambiental**; **(f) IMPLEMENTADO: procesamiento de imágenes como bytes para 60% mejora en latencia**.
+Definir el **alcance funcional del Agent Hub** para apoyar investigación en **educación y gestión ambiental**:
 
-## 1) Objetivos V3.0 (Agent Hub)
+### **Objetivo Principal (Tesis):**
+Recolectar **datos ambientales precisos y relevantes** sobre generación de residuos en ambientes universitarios para:
+1. **Educación ambiental**: Retroalimentación inmediata que refuerce comportamientos de reciclaje
+2. **Recolección de datos**: Volumenes, tipos y frecuencia de residuos por facultad/ubicación
+3. **Análisis ambiental**: Datos que soporten toma de decisiones en gestión de residuos
+4. **Impacto cuantificado**: CO₂ evitado, recursos ahorrados, métricas ambientales verificables
 
-- **Académico**: demostrar integración de IA aplicada a problema ambiental real para tesis de ingeniería ambiental
-- **Investigación**: comparar múltiples modelos de clasificación (LLMs generalistas vs especializados) evaluando accuracy, latencia y costo para validar hipótesis científicas
-- **Técnico**: entregar orquestador Python con pipeline de agentes especializados, robusto, económico y **agnóstico al modelo** (Adapter Pattern)
-- **Operacional**: clasificar residuos con p95 latency <2s (logrado con bytes processing) y costo <$0.025 por scan
-- **Integración COMPLETA**: generar TODOS los datos que Backend Rails necesita para cálculos ambientales precisos
-- **NUEVO - Ambiental**: permitir cálculos de impacto reales con volumen/peso estimados
-- **IMPLEMENTADO - Performance**: procesamiento de imágenes como bytes (60% más rápido que URLs)
+### **Componente Técnico (Soporte):**
+Sistema de IA que clasifica residuos desde imágenes y **genera datos ambientales estructurados** para análisis. Los aspectos técnicos (arquitectura, modelos, latencia) son **medios**, no fines - herramientas para lograr objetivos ambientales.
+
+### **Alcance Agent Hub:**
+Orquestador que: (a) clasifica residuos con IA; (b) **estima datos físicos necesarios** (volumen, peso) para cálculos ambientales precisos; (c) previene uso malicioso; (d) envía datos completos al Backend para persistencia y análisis.
+
+## 1) Objetivos V3.0 (Tesis Ingeniería Ambiental)
+
+### **Objetivos Ambientales (PRIORITARIOS - Tesis):**
+1. **Recolección de datos ambientales**: Capturar tipo, volumen y peso de residuos con precisión suficiente para análisis ambiental
+2. **Educación ambiental**: Proveer retroalimentación educativa que refuerce comportamientos de reciclaje correctos
+3. **Cuantificación de impacto**: Generar datos que permitan calcular CO₂ evitado, agua/energía ahorrada, eficiencia de reciclaje
+4. **Análisis por ubicación**: Datos estructurados para comparar generación de residuos entre facultades/estaciones
+5. **Soporte a decisiones**: Información para optimizar ubicación de contenedores, campañas educativas, políticas ambientales
+
+### **Objetivos Técnicos (SOPORTE - Desarrollo):**
+- **Clasificación automática**: IA que identifica material del residuo sin intervención humana
+- **Estimación física**: Volumen y peso aproximados para cálculos ambientales (no requiere precisión de laboratorio)
+- **Integración completa**: Todos los datos al Backend Rails para persistencia y análisis
+- **Experiencia fluida**: Respuesta <2s para no interrumpir comportamiento de reciclaje
+- **Costo sostenible**: <$0.025 por scan para viabilidad a largo plazo
+
+### **Objetivos de Aprendizaje Personal (BONUS - No tesis):**
+- Experimentar con arquitectura de agentes especializados
+- Comparar modelos de IA (GPT-4o, Gemini, Roboflow) - **curiosidad técnica, no hipótesis central**
+- Aplicar patrones de diseño avanzados (DDD, Adapter Pattern)
 
 ## 2) Alcance MVP V3.0 - Agent Hub (7 días)
 
-- **Pipeline de Validación**: PreValidator anti-troll con GPT-4o-mini
-- **Pipeline de Clasificación**: Classifier con **arquitectura intercambiable** (Adapter Pattern)
-- **IMPLEMENTADO - Bytes Processing**: Adapters aceptan bytes O URLs (60% mejora con bytes)
-- **IMPLEMENTADO - S3 Async**: Upload a S3 como background task (no bloquea clasificación)
-- **NUEVO - Pipeline de Detección**: SubtypeDetector para identificar tipos específicos
-- **NUEVO - Pipeline de Estimación**: VolumeEstimator para calcular volumen y peso
-- **Modelos soportados MVP**: GPT-4o (preferido), Gemini 2.0 Flash, **Roboflow Custom (YA ENTRENADO)**
-- **Lógica de Negocio**: Mapper material→color (NTC 2184 Colombia)
-- **NUEVO - Mapeo Avanzado**: WasteTypeMapper material+volumen→waste_type_code
-- **Feedback Educativo**: FeedbackCoach con GPT-3.5-turbo
-- **API REST**: Endpoint `/classify` con FastAPI
-- **Integración Backend COMPLETA**: Cliente HTTP que envía TODOS los datos necesarios
-- **Telemetría Científica**: Logs estructurados con modelo usado, latencia, costo y confidence por request
+### **Features Ambientales (CORE - Para Tesis):**
+- ✅ **Clasificación automática**: Identifica tipo de residuo (PLASTIC, METAL, GLASS, PAPER, ORGANIC)
+- ✅ **Estimación física**: Volumen y peso aproximados para cálculos ambientales
+- ✅ **Retroalimentación educativa**: Mensajes que refuerzan comportamiento correcto
+- ✅ **Integración Backend COMPLETA**: Envía TODOS los datos al Backend Rails para persistencia
+- ✅ **Datos estructurados**: Material, volumen, peso, ubicación, fecha → listos para análisis
+- ✅ **Prevención de datos inválidos**: Validación anti-troll para calidad de datos
 
-## 3) Historias de Usuario V3.0 (Agent Hub)
+### **Features Técnicas (SOPORTE - Necesarias pero no centrales):**
+- ✅ **Pipeline de Validación**: PreValidator anti-troll
+- ✅ **Pipeline de Clasificación**: Classifier con arquitectura intercambiable (experimentación)
+- ✅ **Pipeline de Detección**: SubtypeDetector para características físicas
+- ✅ **Pipeline de Estimación**: VolumeEstimator para datos físicos
+- ✅ **Modelos soportados**: GPT-4o (preferido), Gemini 2.0 Flash, Roboflow Custom
+- ✅ **Bytes Processing**: Imágenes como bytes (60% mejora latencia)
+- ✅ **API REST**: Endpoint `/classify` con FastAPI
 
-- Como **estudiante**, quiero escanear mi residuo y recibir clasificación + feedback + **impacto ambiental calculado** en menos de 2 segundos para que la experiencia sea fluida y educativa
-- Como **admin del sistema**, quiero prevenir requests maliciosos (trolls) para controlar costos de API
-- Como **backend Rails**, quiero recibir datos **COMPLETOS** (material, subtipo, volumen, peso) vía API para calcular métricas ambientales **PRECISAS** sin estimaciones
-- Como **investigador ambiental**, quiero que el sistema identifique subtipos específicos (botella 500ml vs 1L) para cálculos de impacto diferenciados
-- Como **investigador académico**, quiero comparar accuracy, latencia y costo de diferentes modelos (GPT-4o, Gemini, Roboflow) para validar hipótesis de tesis
-- Como **gestor de presupuesto**, quiero que el costo por scan sea predecible y <$0.025 incluyendo estimación de volumen
-- Como **desarrollador**, quiero cambiar el modelo de clasificación mediante configuración para experimentar rápidamente
-- Como **sistema**, quiero procesar imágenes como bytes para obtener 60% mejora en latencia vs URLs
+### **Features Experimentales (BONUS - Aprendizaje personal):**
+- ✅ **Comparación de modelos**: Logs de accuracy, latencia, costo por modelo (curiosidad técnica)
+- ✅ **Adapter Pattern**: Arquitectura que permite switching de modelos (práctica de diseño)
+- ✅ **Telemetría**: Métricas detalladas por request (debugging/optimización)
+
+### **Fuera de Alcance (Otros proyectos):**
+- ❌ Backend Rails API (ya completado - Sprints 1 y 2)
+- ❌ Frontend PWA (futuro Sprint 5)
+- ❌ Dashboards de análisis (Backend + Frontend)
+
+## 3) Historias de Usuario V3.0 (Enfoque Ambiental)
+
+### **Perspectiva Ambiental (Tesis):**
+- Como **estudiante universitario**, quiero escanear mi residuo y recibir **clasificación correcta + feedback educativo + impacto ambiental** en <2s para aprender mientras reciclo
+- Como **investigador ambiental (tesista)**, quiero recolectar **datos estructurados** (tipo, volumen, peso, ubicación, fecha) de miles de scans para analizar patrones de generación de residuos
+- Como **investigador ambiental**, quiero que el sistema **estime volumen y peso** con precisión razonable (±20-30%) para calcular impactos ambientales sin pesar cada residuo manualmente
+- Como **gestor ambiental universitario**, quiero **comparar generación de residuos entre facultades** para focalizar campañas educativas en áreas problemáticas
+- Como **investigador ambiental**, quiero **cuantificar CO₂ evitado, agua/energía ahorrada** con datos reales para reportes de sostenibilidad institucional
+- Como **estudiante de ingeniería ambiental**, quiero demostrar que **datos automatizados pueden reemplazar mediciones manuales** para gestión de residuos a escala
+
+### **Perspectiva Técnica (Soporte):**
+- Como **backend Rails**, quiero recibir datos completos (material, volumen, peso) para calcular métricas ambientales sin estimaciones adicionales
+- Como **admin del sistema**, quiero prevenir scans falsos (trolls) para mantener calidad de datos ambientales
+- Como **sistema**, quiero clasificar con confianza >70% para garantizar datos confiables para análisis
+
+### **Perspectiva Desarrollo Personal (Bonus):**
+- Como **desarrollador tesista**, quiero experimentar con diferentes modelos de IA para aprender sobre trade-offs técnicos (no es hipótesis central de tesis)
 
 ## 4) Requisitos Funcionales
 
