@@ -13,7 +13,8 @@ structlog==23.2.0
 # AI Provider SDKs
 openai>=1.0.0
 anthropic>=0.7.0
-google-generativeai>=0.3.0
+google-generativeai>=0.8.0
+roboflow>=1.1.0
 
 # AWS S3
 boto3>=1.28.0
