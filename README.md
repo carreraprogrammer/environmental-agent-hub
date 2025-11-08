@@ -176,31 +176,104 @@ Configure provider credentials and model selection in `.env`:
 
 ```bash
 # Active classifier model
-# Options: openai-gpt4, openai-gpt4o, gemini, roboflow
+# Options: openai-gpt4, openai-gpt4o, claude, gemini, roboflow
 CLASSIFIER_MODEL=openai-gpt4o
 
 # OpenAI
 OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o
 
 # Google Gemini
 GOOGLE_API_KEY=...
+GOOGLE_MODEL=gemini-2.5-flash
+
+# Anthropic (placeholder - not fully implemented)
+ANTHROPIC_API_KEY=...
 
 # Roboflow (workspace/project/version)
 ROBOFLOW_API_KEY=...
 ROBOFLOW_MODEL_ID=environmental-assitant-agents/waste-classifier-louut-b9sot/1
+ROBOFLOW_CONFIDENCE_THRESHOLD=0.4
 ```
-
-Roboflow setup: **Model already trained and deployed** (`environmental-assitant-agents/waste-classifier-louut-b9sot/1`). For custom model, create a project in your Roboflow workspace, publish a version, and set `ROBOFLOW_MODEL_ID` as `workspace/project/version`.
 
 ### Switch Classification Model
 
-Edit `.env`:
+The Factory Pattern enables switching between models **without code changes**. Simply edit `.env`:
+
 ```bash
-# Options: openai-gpt4, openai-gpt4o, gemini, roboflow
+# Options: openai-gpt4, openai-gpt4o, claude, gemini, roboflow
 CLASSIFIER_MODEL=openai-gpt4o
 ```
 
-No code changes required!
+Or programmatically override in code:
+
+```python
+from app.factories.classifier_factory import ClassifierFactory
+
+# Use default from settings
+adapter = ClassifierFactory.create()
+
+# Override for specific request
+adapter = ClassifierFactory.create(model_override="roboflow")
+
+# List all available models
+models = ClassifierFactory.list_available()
+# ['openai-gpt4', 'openai-gpt4o', 'claude', 'gemini', 'roboflow']
+```
+
+### Roboflow Setup & Configuration
+
+**Model already trained and deployed**: `environmental-assitant-agents/waste-classifier-louut-b9sot/1`
+
+#### Using the Public Model
+
+1. Get API Key from [Roboflow Account](https://app.roboflow.com)
+2. Configure `.env`:
+   ```bash
+   ROBOFLOW_API_KEY=your_api_key_here
+   ROBOFLOW_MODEL_ID=environmental-assitant-agents/waste-classifier-louut-b9sot/1
+   CLASSIFIER_MODEL=roboflow
+   ```
+
+#### Creating a Custom Model
+
+1. **Create Account**: Sign up at [Roboflow](https://roboflow.com)
+
+2. **Create Project**:
+   - Navigate to "Create Project"
+   - Select "Object Detection" or "Classification"
+   - Name: `waste-classifier`
+
+3. **Upload Dataset**:
+   - Upload waste images (recommended: 100+ images per class)
+   - Classes: plastic, paper, glass, metal, organic, other
+   - Annotate images (bounding boxes or labels)
+
+4. **Train Model**:
+   - Generate dataset version
+   - Click "Train" → Select plan (Free or Paid)
+   - Wait 5-15 minutes for training
+
+5. **Deploy & Configure**:
+   - Copy Model ID from deployment page (format: `workspace/project/version`)
+   - Update `.env`:
+     ```bash
+     ROBOFLOW_MODEL_ID=your-workspace/waste-classifier/1
+     ```
+
+6. **Test Integration**:
+   ```bash
+   # Run integration tests
+   RUN_INTEGRATION_TESTS=1 pytest tests/integration/test_classifier_factory_integration.py::test_factory_roboflow_integration -v
+   ```
+
+#### Roboflow Adapter Features
+
+- **Free Tier**: 1,000 API calls/month
+- **Cost**: ~$0.001 per classification (10x cheaper than GPT-4)
+- **Speed**: ~500ms average (faster than LLMs)
+- **Accuracy**: Depends on training data (typically 70-90% for waste)
+- **Use Case**: Production deployments requiring cost optimization
 
 ### Adjust Logging
 

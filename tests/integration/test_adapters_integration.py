@@ -1,4 +1,7 @@
-"""Integration-style tests for classifier adapters."""
+"""Integration-style tests for classifier adapters.
+
+This file avoids any real network traffic unless RUN_INTEGRATION_TESTS is set.
+"""
 
 from __future__ import annotations
 
@@ -69,6 +72,12 @@ async def test_all_adapters_consistent_schema(monkeypatch):
     monkeypatch.setattr(OpenAIClassifierAdapter, "classify", fake_classify)
     monkeypatch.setattr(GoogleClassifierAdapter, "classify", fake_classify)
     monkeypatch.setattr(RoboflowClassifierAdapter, "classify", fake_classify)
+
+    # Evitar llamadas de red en Roboflow durante __init__
+    # Reemplazamos __init__ para no inicializar el cliente real
+    def _rf_init_noop(self, model_id: str | None = None):  # type: ignore[no-redef]
+        self.model_id = model_id or "workspace/project/1"
+    monkeypatch.setattr(RoboflowClassifierAdapter, "__init__", _rf_init_noop)
 
     adapters = [
         OpenAIClassifierAdapter(),
