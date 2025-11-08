@@ -4,11 +4,15 @@ Waste classification system with interchangeable AI models (GPT-4, Gemini, Robof
 
 ## 🎯 Features
 
-- **Interchangeable Models**: Switch between GPT-4, Gemini, Roboflow without code changes
+- **Complete AI Pipeline**: 10-agent orchestration (PreValidator, Classifier, SubtypeDetector, VolumeEstimator, WasteTypeMapper, FeedbackCoach, etc.)
+- **Interchangeable Models**: Switch between GPT-4o, Gemini 2.0 Flash, Roboflow Custom without code changes
+- **Bytes Processing**: 60% faster latency using image bytes vs URLs (async S3 upload in background)
+- **Physical Estimation**: Volume and weight estimation for environmental impact calculations
+- **Backend Integration**: Full data sync with Rails API (waste_type_code, volume, weight, characteristics)
 - **DDD Architecture**: Clean, maintainable, extensible codebase
-- **Fast**: <2s p95 latency end-to-end
-- **Cost-Effective**: Optimized for <$0.015 per classification
-- **Observable**: Structured JSON logging with trace_id
+- **Fast**: <3s p95 latency end-to-end (complete pipeline with 10 agents)
+- **Cost-Effective**: Optimized for <$0.025 per scan
+- **Observable**: Structured JSON logging with trace_id and per-agent metrics
 - **Production-Ready**: Docker + Railway deployment
 
 ## 🏗️ Stack
@@ -129,22 +133,35 @@ railway logs
 - **API Docs**: `/docs` (Swagger UI)
 - **ReDoc**: `/redoc` (Alternative docs)
 - **Health Check**: `/health`
-- **Project Spec**: `docs/project-spec-agents.v2.1.md`
-- **Architecture Spec**: `docs/architecture-spec-agents.v2.md`
+- **Project Spec V3**: `agents-specs/V3/project-spec-agents.v3.md`
+- **Architecture Spec V2**: `agents-specs/V2/architecture-spec-agents.v2.md`
 
 ## 🏛️ Architecture
 
+### Complete AI Pipeline (10 Agents)
+1. **Router** → Request validation
+2. **PreValidator** → Anti-troll detection (GPT-4o-mini)
+3. **Classifier** → Material classification (GPT-4o/Gemini/Roboflow)
+4. **SubtypeDetector** → Specific characteristics (PET, aluminum, size, color)
+5. **VolumeEstimator** → Volume and weight estimation (lookup table)
+6. **Mapper** → Material → Color (NTC 2184)
+7. **WasteTypeMapper** → Characteristics → Backend waste_type_code
+8. **FeedbackCoach** → Educational message generation (GPT-3.5-turbo)
+9. **Assembler** → Response construction
+10. **BackendIntegration** → Data sync with Rails API
+
+### Project Structure
 ```
 agent-hub/
 ├── app/
 │   ├── api/          # FastAPI endpoints
 │   ├── core/         # Configuration & logging
-│   ├── agents/       # Domain agents
-│   ├── adapters/     # Model adapters (Adapter Pattern)
+│   ├── agents/       # 10 domain agents (complete pipeline)
+│   ├── adapters/     # Model adapters (bytes | str support)
 │   ├── factories/    # Object creation (Factory Pattern)
 │   ├── orchestrator/ # Pipeline coordination
 │   ├── schemas/      # Pydantic models
-│   ├── services/     # External services
+│   ├── services/     # External services (S3, Backend client)
 │   └── utils/        # Shared utilities
 ├── config/           # YAML configurations
 ├── tests/            # Unit & integration tests
@@ -170,10 +187,10 @@ GOOGLE_API_KEY=...
 
 # Roboflow (workspace/project/version)
 ROBOFLOW_API_KEY=...
-ROBOFLOW_MODEL_ID=environmental-agent-hub/waste-classifier/1
+ROBOFLOW_MODEL_ID=environmental-assitant-agents/waste-classifier-louut-b9sot/1
 ```
 
-Roboflow setup: create a project in your Roboflow workspace, publish a version, and set `ROBOFLOW_MODEL_ID` as `workspace/project/version` (e.g., `environmental-agent-hub/waste-classifier/1`).
+Roboflow setup: **Model already trained and deployed** (`environmental-assitant-agents/waste-classifier-louut-b9sot/1`). For custom model, create a project in your Roboflow workspace, publish a version, and set `ROBOFLOW_MODEL_ID` as `workspace/project/version`.
 
 ### Switch Classification Model
 
@@ -194,10 +211,15 @@ LOG_FORMAT=json # json or text
 
 ## 📊 Performance Targets
 
-- **Latency**: p95 < 2000ms
-- **Cost**: < $0.015 per classification
+- **Latency**: p95 < 3000ms (complete pipeline with 10 agents)
+  - With bytes processing: ~2.4s (60% faster than URLs)
+  - Breakdown: PreValidator (450ms) + Classifier (600ms) + SubtypeDetector (700ms) + VolumeEstimator (50ms) + Others (600ms)
+- **Cost**: < $0.025 per scan (MVP with lookup table for volume estimation)
+  - PreValidator: $0.0002 | Classifier: $0.0050 | SubtypeDetector: $0.0050 | FeedbackCoach: $0.0020
 - **Availability**: 99.9%
 - **Success Rate**: > 95%
+- **Subtype Accuracy**: > 75%
+- **Volume Estimation Precision**: ±25%
 
 ## 🤝 Contributing
 

@@ -1,13 +1,13 @@
 # 📋 Reporte de Validación EDV-46
-**Fecha:** 2025-11-01 17:20:53  
+**Fecha:** 2025-11-07 18:08:53  
 **Ticket:** EDV-46 - Core Classifier Adapters Implementation  
 **Sprint Designer:** Validación Automatizada  
 
 ## 📊 Métricas de Calidad
-- ✅ **PASS:** 62 criterios
-- ❌ **FAIL:** 0 criterios  
+- ✅ **PASS:** 53 criterios
+- ❌ **FAIL:** 10 criterios  
 - ⚠️ **WARN:** 6 advertencias
-- 📈 **Éxito:** 100%
+- 📈 **Éxito:** 84%
 
 ## ✅ Criterios de Aceptación Validados
 
@@ -27,13 +27,13 @@
 ✅ **COMPLETADO** - README y .env.example actualizados
 
 ## 🎯 Estado del Ticket
-🎉 **TICKET COMPLETADO** - Todos los criterios PASSED
+❌ **INCOMPLETO** - 10 criterios críticos fallando
 
 ## 🔬 Comparación Científica Habilitada
 ✅ Base sólida para tesis académica:\n- OpenAI (generalista pagado)\n- Gemini (generalista gratuito)\n- Roboflow (especializado custom)\n\n**Métricas comparables:** accuracy, latencia, costo
 
 ## 📝 Próximos Pasos
-- ✅ Mover ticket a DONE\n- ✅ Iniciar EDV-47 (Factory Pattern)\n- 🔬 Ejecutar experimentos comparativos\n- 📊 Recolectar métricas para tesis
+- 🔧 Revisar criterios fallidos arriba\n- 🔄 Re-ejecutar validación\n- 📋 Crear subtasks si es necesario
 
 ---
 *Reporte generado automáticamente por validation-edv46.sh*
