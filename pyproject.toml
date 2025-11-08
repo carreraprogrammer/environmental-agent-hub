@@ -81,6 +81,9 @@ addopts = [
     "--strict-config",
     "-ra",
 ]
+markers = [
+    "integration: Tests de integración que pueden tocar SDKs o red (se skippean si no se define RUN_INTEGRATION_TESTS)",
+]
 
 # Coverage configuration
 [tool.coverage.run]
