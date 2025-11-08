@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     # Active classifier
     CLASSIFIER_MODEL: str = Field(
         default="openai-gpt4",
-        description="Active model: openai-gpt4|gemini|roboflow",
+        description="Active model: openai-gpt4|openai-gpt4o|claude|gemini|roboflow",
     )
 
     # Anthropic Configuration (Optional)
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     def validate_classifier_model(cls, value: str) -> str:
         """Validate the selected classifier model."""
 
-        allowed = ["openai-gpt4", "openai-gpt4o", "gemini", "roboflow"]
+        allowed = ["openai-gpt4", "openai-gpt4o", "claude", "gemini", "roboflow"]
         if value not in allowed:
             raise ValueError(f"CLASSIFIER_MODEL must be one of {allowed}")
         return value
