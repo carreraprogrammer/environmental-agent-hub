@@ -275,11 +275,193 @@ models = ClassifierFactory.list_available()
 - **Accuracy**: Depends on training data (typically 70-90% for waste)
 - **Use Case**: Production deployments requiring cost optimization
 
-### Adjust Logging
+### Logging Configuration
+
+Agent Hub uses **structured logging with structlog** for production observability and debugging.
+
+#### Basic Configuration
+
+Configure logging via environment variables in `.env`:
 
 ```bash
-LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR
-LOG_FORMAT=json # json or text
+LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FORMAT=json # json (production) or text (development)
+```
+
+#### Log Formats
+
+**Production (JSON)**:
+```bash
+LOG_FORMAT=json
+```
+- Structured JSON output for log aggregation systems
+- Parseable by CloudWatch, Datadog, Elasticsearch, etc.
+- Example output:
+  ```json
+  {
+    "timestamp": "2025-11-07T10:30:15.234Z",
+    "level": "info",
+    "event": "classification_complete",
+    "trace_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "agent": "Classifier",
+    "action": "classify_material",
+    "material": "PLASTIC",
+    "confidence": 0.89,
+    "model_used": "openai/gpt-4-vision-preview",
+    "latency_ms": 1200,
+    "cost_usd": 0.010
+  }
+  ```
+
+**Development (Text)**:
+```bash
+LOG_FORMAT=text
+```
+- Human-readable console output with colors
+- Better for local debugging
+- Example output:
+  ```
+  2025-11-07 10:30:15 [info     ] classification_complete agent=Classifier material=PLASTIC confidence=0.89
+  ```
+
+#### Standard Log Fields
+
+**Mandatory fields** (present in all logs):
+- `timestamp`: ISO 8601 format (e.g., `2025-11-07T10:30:15.234Z`)
+- `level`: Log level (`debug`, `info`, `warning`, `error`, `critical`)
+- `event`: Event description (e.g., `pipeline_step`, `classification_complete`)
+
+**Contextual fields** (agent-specific):
+- `trace_id`: UUID for request correlation across pipeline
+- `agent`: Agent name (`PreValidator`, `Classifier`, etc.)
+- `action`: Specific action (`validate_image`, `classify_material`)
+- `latency_ms`: Execution time in milliseconds
+- `cost_usd`: Operation cost (for LLM calls)
+- `model_used`: Active model (e.g., `openai/gpt-4o`)
+- `confidence`: Classification confidence score (0.0-1.0)
+- `material`: Classified material type
+- `error_code`: Error code for failures
+
+#### Usage in Code
+
+**Basic logging**:
+```python
+from app.core.logging import logger
+
+logger.info("event_name", trace_id="abc-123", agent="Classifier")
+logger.error("validation_failed", error_code="NO_WASTE_DETECTED")
+```
+
+**Context binding** (recommended for agents):
+```python
+from app.core.logging import logger
+
+# Create agent-specific logger with persistent context
+agent_logger = logger.bind(agent="PreValidator", trace_id="abc-123")
+
+# All subsequent logs include agent and trace_id
+agent_logger.info("validation_started")
+agent_logger.info("image_received", size_kb=450)
+agent_logger.info("validation_complete", has_waste=True)
+```
+
+**Logging with exceptions**:
+```python
+try:
+    result = classify_image(image)
+except Exception as e:
+    logger.error("classification_failed", error=str(e), exc_info=True)
+```
+
+#### Log Levels
+
+- `DEBUG`: Detailed diagnostic information (development only)
+  ```python
+  logger.debug("processing_step", step=1, data=image_data)
+  ```
+
+- `INFO`: General informational messages (default for production)
+  ```python
+  logger.info("classification_complete", material="PLASTIC")
+  ```
+
+- `WARNING`: Warning messages for unexpected but handled situations
+  ```python
+  logger.warning("low_confidence", confidence=0.45, threshold=0.7)
+  ```
+
+- `ERROR`: Error messages for failures
+  ```python
+  logger.error("api_call_failed", provider="openai", status_code=500)
+  ```
+
+- `CRITICAL`: Critical failures requiring immediate attention
+  ```python
+  logger.critical("database_connection_lost", retry_count=3)
+  ```
+
+#### Viewing Logs
+
+**Local development**:
+```bash
+# Start with DEBUG level and text format
+LOG_LEVEL=DEBUG LOG_FORMAT=text uvicorn app.main:app --reload
+```
+
+**Production (Railway)**:
+```bash
+# View live logs
+railway logs
+
+# Follow logs in real-time
+railway logs --follow
+
+# Filter by level
+railway logs | grep "error"
+```
+
+**Docker**:
+```bash
+# View logs
+docker-compose -f docker/docker-compose.yml logs
+
+# Follow logs
+docker-compose -f docker/docker-compose.yml logs -f
+
+# Filter by service
+docker-compose -f docker/docker-compose.yml logs agent-hub
+```
+
+#### Trace ID Correlation
+
+Every request through the pipeline gets a unique `trace_id` that propagates through all agents:
+
+1. Request arrives → Generate `trace_id`
+2. PreValidator → Logs with `trace_id`
+3. Classifier → Logs with same `trace_id`
+4. All subsequent agents → Use same `trace_id`
+
+This enables **end-to-end request tracing** in production:
+
+```bash
+# Find all logs for a specific request
+railway logs | grep "trace_id=a1b2c3d4-e5f6-7890"
+
+# Or with JSON logs:
+railway logs | jq 'select(.trace_id == "a1b2c3d4-e5f6-7890")'
+```
+
+#### Testing Logging
+
+```bash
+# Run logging tests
+pytest tests/unit/test_logging.py -v
+
+# Test JSON format output
+pytest tests/unit/test_logging.py::TestJSONOutput -v
+
+# Test trace_id propagation
+pytest tests/unit/test_logging.py::TestTraceIdPropagation -v
 ```
 
 ## 📊 Performance Targets
