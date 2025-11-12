@@ -61,16 +61,32 @@ app.include_router(health_router)
 async def startup_event() -> None:
     """
     Startup event handler.
-    
-    Logs application start with configuration info.
+
+    Logs application start with comprehensive configuration info.
     """
     try:
         if settings and logger:
+            # Count available agents
+            import os
+            agents_dir = os.path.join(os.path.dirname(__file__), "agents")
+            agent_files = [
+                f for f in os.listdir(agents_dir)
+                if f.endswith(".py") and f != "__init__.py"
+            ]
+            num_agents = len(agent_files)
+
+            # Log comprehensive startup information
             logger.info(
                 "agent_hub_started",
-                version="2.0.0",
+                version=settings.API_VERSION,
+                environment="production" if not settings.DEBUG else "development",
                 debug=settings.DEBUG,
+                log_level=settings.LOG_LEVEL,
+                log_format=settings.LOG_FORMAT,
                 classifier_model=settings.CLASSIFIER_MODEL,
+                num_agents=num_agents,
+                available_agents=sorted([f.replace(".py", "") for f in agent_files]),
+                cors_origins=settings.CORS_ORIGINS,
             )
         else:
             print("Agent Hub started - version 2.0.0")
