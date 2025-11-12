@@ -27,6 +27,7 @@ class ClassificationResult:
     model_used: str
     model_provider: str
     raw_response: str | None = None
+    reasoning: str = ""
     metadata: MutableMapping[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> Mapping[str, Any]:
@@ -38,5 +39,6 @@ class ClassificationResult:
             "model_used": self.model_used,
             "model_provider": self.model_provider,
             "raw_response": self.raw_response,
+            "reasoning": self.reasoning,
             "metadata": dict(self.metadata),
         }
