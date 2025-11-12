@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # permitir disparo manual
 
 jobs:
   deploy:
@@ -18,9 +18,9 @@ jobs:
         run: npm install -g @railway/cli
       
       - name: Deploy to Railway
-        run: railway up
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service "ENVIRONMENTAL-AGENTS-HUB"
       
       - name: Verify deployment
         run: |
