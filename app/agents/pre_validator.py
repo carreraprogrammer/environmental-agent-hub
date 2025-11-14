@@ -1,11 +1,11 @@
 """
-PreValidator Agent - Anti-Troll waste detection.
+PreValidator Agent V4 - Two-layer waste detection.
 
 Responsibilities:
-- Binary detection: does image contain waste? (YES/NO)
-- Reject trolls, selfies, landscapes, inappropriate content
-- Fast and cheap: GPT-4o-mini (~$0.0002/request)
-- Aggressive timeout: 500ms max latency
+- Layer 1: Technical validations (format, size, dimensions)
+- Layer 2: Waste detection via Roboflow Object Detection API
+- Fast and cheap: Roboflow Object Detection (~$0.001/request)
+- Aggressive timeout: 3s max latency with fallback
 
 This agent protects the pipeline from abuse and reduces costs by filtering
 out non-waste images before expensive classification.
@@ -15,267 +15,362 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
+from io import BytesIO
 from typing import TYPE_CHECKING
+
+from PIL import Image
 
 from app.core.config import settings
 from app.core.logging import logger
-from app.schemas.validation import ValidationResult
+from app.schemas.classification import ValidationReason, ValidationResult
 
 if TYPE_CHECKING:
-    import openai
+    from roboflow import Roboflow
 
 
 class PreValidator:
     """
-    PreValidator Agent - Detects if image contains waste (anti-troll).
+    PreValidator Agent V4 - Two-layer waste detection.
 
-    Uses GPT-4o-mini for fast and cheap binary classification.
-    Cost: ~$0.0002 per request
-    Timeout: 500ms
+    Layer 1: Technical validations (format, size, dimensions)
+    Layer 2: Roboflow Object Detection for waste presence
+
+    Cost: ~$0.001 per request
+    Timeout: 3s with fallback to allow processing
 
     Example:
         >>> validator = PreValidator()
         >>> result = await validator.validate(image_bytes, "trace-123")
-        >>> if result.has_waste:
+        >>> if result.is_valid:
         ...     print(f"Waste detected: {result.reason}")
         ... else:
-        ...     print(f"No waste: {result.reason}")
+        ...     print(f"Rejected: {result.reason}")
     """
 
-    def __init__(self, timeout: float = 0.5):
+    # Roboflow config
+    ROBOFLOW_CONFIDENCE_THRESHOLD = 0.4  # Permissive to avoid false negatives
+    ROBOFLOW_OVERLAP_THRESHOLD = 0.5
+    ROBOFLOW_TIMEOUT = 3.0  # 3 seconds timeout
+
+    # Technical validation thresholds
+    MAX_IMAGE_SIZE_MB = 10
+    MIN_WIDTH = 224
+    MIN_HEIGHT = 224
+    ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
+
+    def __init__(
+        self,
+        model_id: str | None = None,
+        confidence_threshold: float | None = None,
+        overlap_threshold: float | None = None,
+    ):
         """
-        Initialize PreValidator with OpenAI client.
+        Initialize PreValidator with Roboflow client.
 
         Args:
-            timeout: Timeout in seconds for validation (default: 0.5s = 500ms)
+            model_id: Roboflow model ID (format: workspace/project/version)
+            confidence_threshold: Detection confidence threshold (default: 0.4)
+            overlap_threshold: Overlap threshold for NMS (default: 0.5)
         """
-        # Lazy import to avoid loading OpenAI unless needed
-        import openai
+        # Lazy import to avoid loading Roboflow unless needed
+        from roboflow import Roboflow
 
-        self.client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        self.model = "gpt-4o-mini"
-        self.timeout = timeout
+        self.model_id = model_id or settings.ROBOFLOW_MODEL_ID
+        self.confidence_threshold = confidence_threshold or self.ROBOFLOW_CONFIDENCE_THRESHOLD
+        self.overlap_threshold = overlap_threshold or self.ROBOFLOW_OVERLAP_THRESHOLD
+
+        # Initialize Roboflow client
+        try:
+            workspace, project, version = self.model_id.split("/")
+        except ValueError as exc:
+            raise ValueError(
+                f"Roboflow model_id must follow 'workspace/project/version' format, got: {self.model_id}"
+            ) from exc
+
+        client = Roboflow(api_key=settings.ROBOFLOW_API_KEY)
+        project_ref = client.workspace(workspace).project(project)
+        self.model = project_ref.version(version).model
+
+        logger.info(
+            "pre_validator_initialized",
+            model_id=self.model_id,
+            confidence_threshold=self.confidence_threshold,
+            overlap_threshold=self.overlap_threshold,
+        )
 
     async def validate(self, image_data: bytes, trace_id: str) -> ValidationResult:
         """
-        Validate if image contains waste.
+        Validate image using two-layer approach.
+
+        Layer 1: Technical validations (format, size, dimensions)
+        Layer 2: Roboflow Object Detection for waste presence
 
         Args:
-            image_data: Image bytes (JPEG, PNG, etc.)
+            image_data: Image bytes (JPEG, PNG, WEBP)
             trace_id: Request trace ID for logging
 
         Returns:
-            ValidationResult with has_waste, confidence, reason
+            ValidationResult with is_valid, reason, metadata
 
         Raises:
-            TimeoutError: If validation takes >500ms
-            ValueError: If API fails or image is invalid
-
-        Example:
-            >>> validator = PreValidator()
-            >>> with open("bottle.jpg", "rb") as f:
-            ...     image_bytes = f.read()
-            >>> result = await validator.validate(image_bytes, "trace-123")
-            >>> print(f"Has waste: {result.has_waste}")
-            Has waste: True
+            ValueError: If image fails Layer 1 validations
         """
         logger.info(
             "pre_validator_started",
             trace_id=trace_id,
             agent="PreValidator",
-            model=self.model,
-            timeout_ms=self.timeout * 1000,
+            model_id=self.model_id,
         )
 
+        # Layer 1: Technical validations
+        layer1_result = self._validate_technical(image_data, trace_id)
+        if not layer1_result.is_valid:
+            logger.info(
+                "pre_validator_layer1_reject",
+                trace_id=trace_id,
+                reason=layer1_result.reason,
+            )
+            return layer1_result
+
+        # Layer 2: Roboflow waste detection
         try:
-            # Timeout wrapper
-            result = await asyncio.wait_for(
-                self._call_gpt4o_mini(image_data, trace_id), timeout=self.timeout
+            layer2_result = await asyncio.wait_for(
+                self._detect_waste_roboflow(image_data, trace_id),
+                timeout=self.ROBOFLOW_TIMEOUT,
             )
 
             logger.info(
                 "pre_validator_complete",
                 trace_id=trace_id,
                 agent="PreValidator",
-                has_waste=result.has_waste,
-                confidence=result.confidence,
-                reason=result.reason[:100],  # Truncate for logging
+                is_valid=layer2_result.is_valid,
+                reason=layer2_result.reason,
+                detections_count=len(layer2_result.metadata.get("detections", [])),
             )
 
-            return result
+            return layer2_result
 
         except asyncio.TimeoutError:
-            logger.error(
-                "pre_validator_timeout",
+            logger.warning(
+                "pre_validator_roboflow_timeout",
                 trace_id=trace_id,
-                agent="PreValidator",
-                timeout_ms=self.timeout * 1000,
+                timeout_seconds=self.ROBOFLOW_TIMEOUT,
             )
-            raise TimeoutError(
-                f"PreValidator timeout after {self.timeout}s (500ms limit exceeded)"
+            # Fallback: Allow image to pass to MaterialClassifier
+            return ValidationResult(
+                is_valid=True,
+                reason=ValidationReason.WASTE_DETECTED,
+                metadata={"fallback_reason": "roboflow_timeout"},
+                cost=0.0,
+                fallback_used=True,
             )
 
         except Exception as e:
             logger.error(
-                "pre_validator_error",
+                "pre_validator_roboflow_error",
                 trace_id=trace_id,
-                agent="PreValidator",
                 error=str(e),
                 error_type=type(e).__name__,
             )
-            raise ValueError(f"PreValidator failed: {str(e)}")
+            # Fallback: Allow image to pass to MaterialClassifier
+            return ValidationResult(
+                is_valid=True,
+                reason=ValidationReason.WASTE_DETECTED,
+                metadata={"fallback_reason": "roboflow_error", "error": str(e)},
+                cost=0.0,
+                fallback_used=True,
+            )
 
-    async def _call_gpt4o_mini(
-        self, image_data: bytes, trace_id: str
-    ) -> ValidationResult:
+    def _validate_technical(self, image_data: bytes, trace_id: str) -> ValidationResult:
         """
-        Call GPT-4o-mini API for waste detection.
+        Layer 1: Technical validations.
+
+        Validates:
+        - Image not empty
+        - Format is JPEG, PNG, or WEBP
+        - Size < 10MB
+        - Dimensions >= 224x224
 
         Args:
             image_data: Image bytes
-            trace_id: Request trace ID for logging
+            trace_id: Request trace ID
 
         Returns:
-            ValidationResult with parsed response
-
-        Raises:
-            Exception: If API call fails
+            ValidationResult (is_valid=True if all checks pass)
         """
-        # Encode image to base64
-        image_base64 = base64.b64encode(image_data).decode("utf-8")
-
-        # Prompt engineering: Spanish, structured JSON, clear criteria
-        prompt = """Analiza esta imagen y determina si contiene algún tipo de RESIDUO o BASURA.
-
-Residuos incluyen: botellas, latas, papel, cartón, envases, empaques, desechos orgánicos,
-envolturas, contenedores, bolsas, plásticos, vidrio, metal, etc.
-
-Responde ÚNICAMENTE en formato JSON:
-{
-  "has_waste": true o false,
-  "confidence": 0.0 a 1.0,
-  "reason": "Descripción breve en español de qué ves"
-}
-
-IMPORTANTE:
-- Si ves residuos → has_waste: true
-- Si es selfie, paisaje, animal, persona, objeto NO residuo → has_waste: false
-- Si la imagen es borrosa o no se distingue → has_waste: false, confidence bajo
-- Si no estás seguro → has_waste: false, confidence bajo
-
-Ejemplos:
-- Botella de plástico en el suelo → has_waste: true, confidence: 0.95
-- Selfie de una persona → has_waste: false, confidence: 0.99
-- Paisaje de montaña → has_waste: false, confidence: 0.95
-- Imagen borrosa → has_waste: false, confidence: 0.3"""
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}"
-                                },
-                            },
-                        ],
-                    }
-                ],
-                max_tokens=150,  # Sufficient for short JSON response
-                temperature=0.0,  # Deterministic output
-            )
-
-            # Extract response content
-            content = response.choices[0].message.content
-            if not content:
-                raise ValueError("Empty response from GPT-4o-mini")
-
-            # Parse JSON response
-            return self._parse_response(content, trace_id)
-
-        except Exception as e:
-            logger.error(
-                "pre_validator_api_error",
-                trace_id=trace_id,
-                agent="PreValidator",
-                error=str(e),
-                error_type=type(e).__name__,
-            )
-            raise
-
-    def _parse_response(self, content: str, trace_id: str) -> ValidationResult:
-        """
-        Parse GPT-4o-mini response into ValidationResult.
-
-        Args:
-            content: Raw response content (may contain markdown)
-            trace_id: Request trace ID for logging
-
-        Returns:
-            ValidationResult with parsed data
-
-        Note:
-            Handles markdown code blocks (```json) and falls back to
-            safe defaults if parsing fails.
-        """
-        try:
-            # Strip markdown code blocks if present
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-
-            # Parse JSON
-            result_dict = json.loads(content)
-
-            # Validate required fields
-            if "has_waste" not in result_dict:
-                raise ValueError("Missing 'has_waste' field in response")
-            if "confidence" not in result_dict:
-                raise ValueError("Missing 'confidence' field in response")
-            if "reason" not in result_dict:
-                raise ValueError("Missing 'reason' field in response")
-
+        # Check if image is empty
+        if not image_data or len(image_data) == 0:
             return ValidationResult(
-                has_waste=bool(result_dict["has_waste"]),
-                confidence=float(result_dict["confidence"]),
-                reason=str(result_dict["reason"]),
+                is_valid=False,
+                reason=ValidationReason.EMPTY_IMAGE,
+                metadata={"size_bytes": 0},
+                cost=0.0,
+            )
+
+        # Check file size
+        size_mb = len(image_data) / (1024 * 1024)
+        if size_mb > self.MAX_IMAGE_SIZE_MB:
+            return ValidationResult(
+                is_valid=False,
+                reason=ValidationReason.INVALID_SIZE,
+                metadata={"size_mb": size_mb, "max_size_mb": self.MAX_IMAGE_SIZE_MB},
+                cost=0.0,
+            )
+
+        # Check format and dimensions
+        try:
+            image = Image.open(BytesIO(image_data))
+            image_format = image.format
+            width, height = image.size
+
+            # Validate format
+            if image_format not in self.ALLOWED_FORMATS:
+                return ValidationResult(
+                    is_valid=False,
+                    reason=ValidationReason.INVALID_FORMAT,
+                    metadata={
+                        "format": image_format,
+                        "allowed_formats": list(self.ALLOWED_FORMATS),
+                    },
+                    cost=0.0,
+                )
+
+            # Validate dimensions
+            if width < self.MIN_WIDTH or height < self.MIN_HEIGHT:
+                return ValidationResult(
+                    is_valid=False,
+                    reason=ValidationReason.INVALID_DIMENSIONS,
+                    metadata={
+                        "width": width,
+                        "height": height,
+                        "min_width": self.MIN_WIDTH,
+                        "min_height": self.MIN_HEIGHT,
+                    },
+                    cost=0.0,
+                )
+
+            logger.debug(
+                "pre_validator_layer1_pass",
+                trace_id=trace_id,
+                format=image_format,
+                width=width,
+                height=height,
+                size_mb=round(size_mb, 2),
+            )
+
+            # All technical validations passed
+            return ValidationResult(
+                is_valid=True,
+                reason=ValidationReason.WASTE_DETECTED,  # Temporary, will be overridden by Layer 2
+                metadata={
+                    "format": image_format,
+                    "width": width,
+                    "height": height,
+                    "size_mb": round(size_mb, 2),
+                },
+                cost=0.0,
             )
 
         except Exception as e:
             logger.warning(
-                "pre_validator_parse_error",
+                "pre_validator_layer1_image_error",
                 trace_id=trace_id,
-                agent="PreValidator",
-                raw_response=content[:200],  # Truncate for logging
                 error=str(e),
             )
-
-            # Fallback: assume it's waste for safety (better false positive than false negative)
-            # This prevents blocking legitimate waste images due to parsing errors
             return ValidationResult(
-                has_waste=True,
-                confidence=0.5,
-                reason="Error parsing response, assuming waste for safety",
+                is_valid=False,
+                reason=ValidationReason.INVALID_FORMAT,
+                metadata={"error": str(e)},
+                cost=0.0,
             )
 
-    async def close(self):
-        """Close OpenAI client and cleanup resources."""
-        await self.client.close()
+    async def _detect_waste_roboflow(
+        self, image_data: bytes, trace_id: str
+    ) -> ValidationResult:
+        """
+        Layer 2: Roboflow Object Detection for waste presence.
 
-    async def __aenter__(self):
-        """Async context manager entry."""
-        return self
+        Uses Roboflow Object Detection model to detect waste objects.
+        Expected classes: plastic, paper, cardboard, metal, glass, biodegradable
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.close()
+        Args:
+            image_data: Image bytes
+            trace_id: Request trace ID
+
+        Returns:
+            ValidationResult with detections metadata
+        """
+        # Encode image to base64 for Roboflow
+        image_base64 = base64.b64encode(image_data).decode("utf-8")
+
+        # Call Roboflow API
+        try:
+            # Run in thread pool since Roboflow SDK is synchronous
+            prediction = await asyncio.to_thread(
+                self.model.predict,
+                image_base64,
+                confidence=self.confidence_threshold,
+                overlap=self.overlap_threshold,
+                hosted=False,  # We're passing base64 data
+            )
+
+            # Extract predictions
+            predictions = getattr(prediction, "predictions", None) or []
+
+            # Parse detections
+            detections = []
+            for pred in predictions:
+                detections.append({
+                    "class": getattr(pred, "class_name", "unknown"),
+                    "confidence": float(getattr(pred, "confidence", 0.0)),
+                    "x": float(getattr(pred, "x", 0)),
+                    "y": float(getattr(pred, "y", 0)),
+                    "width": float(getattr(pred, "width", 0)),
+                    "height": float(getattr(pred, "height", 0)),
+                })
+
+            # Log detections for analysis
+            logger.info(
+                "pre_validator_roboflow_detections",
+                trace_id=trace_id,
+                num_detections=len(detections),
+                classes=[d["class"] for d in detections],
+                confidences=[d["confidence"] for d in detections],
+            )
+
+            # Determine if waste was detected
+            if len(detections) == 0:
+                return ValidationResult(
+                    is_valid=False,
+                    reason=ValidationReason.NO_WASTE_DETECTED,
+                    metadata={
+                        "detections": [],
+                        "num_detections": 0,
+                    },
+                    cost=0.001,  # Roboflow API cost
+                    fallback_used=False,
+                )
+            else:
+                return ValidationResult(
+                    is_valid=True,
+                    reason=ValidationReason.WASTE_DETECTED,
+                    metadata={
+                        "detections": detections,
+                        "num_detections": len(detections),
+                        "classes": list(set(d["class"] for d in detections)),
+                    },
+                    cost=0.001,  # Roboflow API cost
+                    fallback_used=False,
+                )
+
+        except Exception as e:
+            logger.error(
+                "pre_validator_roboflow_api_error",
+                trace_id=trace_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise
 
 
 # Legacy function for backward compatibility
