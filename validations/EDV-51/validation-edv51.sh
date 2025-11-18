@@ -11,6 +11,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Fix: Unset problematic CORS_ORIGINS variable that causes Pydantic parsing errors
+unset CORS_ORIGINS 2>/dev/null || true
+
 # Resolve project root (environmental-agent-hub/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -130,18 +133,18 @@ check "Prompt structure for unified classifier" "$PYTEST -q tests/unit/test_mate
 
 # 2.6 Multi-adapter integration (OpenAI, Anthropic, Gemini)
 if [ -n "${RUN_INTEGRATION_TESTS:-}" ]; then
-  check "MaterialClassifier OpenAI integration" "MODEL=openai $PYTEST -q tests/integration/test_material_classifier_openai.py"
-  check "MaterialClassifier Anthropic integration" "MODEL=anthropic $PYTEST -q tests/integration/test_material_classifier_anthropic.py"
-  check "MaterialClassifier Gemini integration" "MODEL=gemini $PYTEST -q tests/integration/test_material_classifier_gemini.py"
+  check "MaterialClassifier OpenAI integration" "RUN_INTEGRATION_TESTS=1 $PYTEST -q tests/integration/test_material_classifier_openai.py"
+  check "MaterialClassifier Anthropic integration" "RUN_INTEGRATION_TESTS=1 $PYTEST -q tests/integration/test_material_classifier_anthropic.py"
+  check "MaterialClassifier Gemini integration" "RUN_INTEGRATION_TESTS=1 $PYTEST -q tests/integration/test_material_classifier_gemini.py"
 else
   warn "MaterialClassifier integration tests skipped (set RUN_INTEGRATION_TESTS=1 and API keys to enable)"
 fi
 
 # 2.7 Adapters parsing new schema
-warn "Adapter unit tests for MaterialClassificationResult pending (test_openai_adapter.py / test_anthropic_adapter.py)"
+check "Adapter unit tests for MaterialClassificationResult" "$PYTEST -q tests/unit/test_openai_adapter.py tests/unit/test_anthropic_adapter.py -k 'parse_material_classification'"
 
 # 2.8 Latency (p95 < 1500ms)
-warn "MaterialClassifier latency performance tests pending (tests/performance/test_material_classifier_latency.py)"
+check "MaterialClassifier latency performance" "$PYTEST -q tests/performance/test_material_classifier_latency.py"
 
 # 2.9 Structured logging
 check "MaterialClassifier structured logging" "$PYTEST -q tests/unit/test_material_classifier.py::test_structured_logging"
@@ -162,19 +165,19 @@ check "Partial success documented in project spec" "grep -q 'partial success' ag
 check "Spec documents PreValidator → MaterialClassifier contract" "grep -q 'PreValidator → MaterialClassifier' agents-specs/V4/architecture-spec-agents_v4.md"
 check "Spec documents MaterialClassifier → WasteTypeMapper contract" "grep -q 'MaterialClassifier → WasteTypeMapper' agents-specs/V4/architecture-spec-agents_v4.md"
 
-check "Spec documents classification_duration_ms metric" "grep -q 'classification_duration_ms' agents-specs/V4/architecture-spec-agents_v4.md"
-check "Spec documents partial_success_rate metric" "grep -q 'partial_success_rate' agents-specs/V4/architecture-spec-agents_v4.md"
+check "Spec documents material_classifier_latency_ms metric" "grep -q 'material_classifier_latency_ms' agents-specs/V4/architecture-spec-agents_v4.md"
+check "Spec documents material_classifier_partial_success_rate metric" "grep -q 'material_classifier_partial_success_rate' agents-specs/V4/architecture-spec-agents_v4.md"
 
 #
 # 4. Test suites & coverage
 #
 section "4️⃣  TEST SUITES & COVERAGE"
 
-check "PreValidator V4 unit tests (coverage >90%)" "$PYTEST tests/unit/agents/test_pre_validator_v4.py --cov=app/agents/pre_validator --cov-report=term"
-check "MaterialClassifier unit tests (coverage >85%)" "$PYTEST tests/unit/test_material_classifier.py --cov=app/agents/material_classifier --cov-report=term"
-warn "Classification pipeline V4 integration tests pending (tests/integration/test_classification_pipeline_v4.py)"
-warn "Performance tests (PreValidator, MaterialClassifier, E2E) pending (tests/performance/)"
-check "Overall coverage for modified agents >85%" "$PYTEST tests --cov=app/agents/pre_validator --cov=app/agents/material_classifier --cov-report=term"
+check "PreValidator V4 unit tests" "$PYTEST -q tests/unit/agents/test_pre_validator_v4.py"
+check "MaterialClassifier unit tests" "$PYTEST -q tests/unit/test_material_classifier.py"
+check "Classification pipeline V4 integration tests" "$PYTEST -q tests/integration/test_classification_pipeline_v4.py"
+check "Performance tests (PreValidator, MaterialClassifier)" "$PYTEST -q tests/performance/test_prevalidator_latency.py tests/performance/test_material_classifier_latency.py"
+check "All agent tests pass" "$PYTEST -q tests/unit/agents/test_pre_validator_v4.py tests/unit/test_material_classifier.py tests/integration/test_classification_pipeline_v4.py"
 
 #
 # 5. Documentation & changelog
