@@ -162,62 +162,19 @@ for material in Material:
 EOF"
 
 #
-# 3. Conditional recommendations (doble color blanco/negro)
+# 3. Mapper philosophy & logging
 #
-section "3️⃣  CONDITIONAL RECOMMENDATIONS (DOUBLE COLOR)"
+section "3️⃣  MAPPER PHILOSOPHY & LOGGING"
 
-check "BinRecommendation schema exists" "test -f app/schemas/bin_recommendation.py"
-check "BinRecommendation & RecommendationType importable" "$PYTHON - << 'EOF'
-from app.schemas.bin_recommendation import BinRecommendation, RecommendationType
-EOF"
-
-check "Contaminated recyclable plastic → CONDITIONAL WHITE/BLACK" "$PYTHON - << 'EOF'
+check "map_to_color returns BinColor directly" "$PYTHON - << 'EOF'
 from app.agents.mapper import Mapper
+from app.schemas.classification import Material
 from app.schemas.bin_color import BinColor
-from app.schemas.bin_recommendation import RecommendationType
-from app.schemas.classification import Material, PhysicalCondition, Recyclability
-mapper = Mapper()
-rec = mapper.map_with_condition(
-    Material.PLASTIC,
-    PhysicalCondition.CONTAMINATED,
-    Recyclability.RECYCLABLE_AFTER_CLEANING,
-    'trace-contaminated-plastic',
-)
-assert rec.primary_bin == BinColor.WHITE
-assert rec.alternative_bin == BinColor.BLACK
-assert rec.recommendation_type == RecommendationType.CONDITIONAL
-EOF"
 
-check "Clean recyclable plastic → definitive WHITE (no alternative)" "$PYTHON - << 'EOF'
-from app.agents.mapper import Mapper
-from app.schemas.bin_color import BinColor
-from app.schemas.bin_recommendation import RecommendationType
-from app.schemas.classification import Material, PhysicalCondition, Recyclability
 mapper = Mapper()
-rec = mapper.map_with_condition(
-    Material.PLASTIC,
-    PhysicalCondition.CLEAN,
-    Recyclability.RECYCLABLE,
-    'trace-clean-plastic',
-)
-assert rec.primary_bin == BinColor.WHITE
-assert rec.alternative_bin is None
-assert rec.recommendation_type == RecommendationType.DEFINITIVE
-EOF"
-
-check "Low confidence classification → UNCERTAIN recommendation" "$PYTHON - << 'EOF'
-from app.agents.mapper import Mapper
-from app.schemas.bin_recommendation import RecommendationType
-from app.schemas.classification import Material, PhysicalCondition, Recyclability
-mapper = Mapper()
-rec = mapper.map_with_condition(
-    Material.PLASTIC,
-    PhysicalCondition.CLEAN,
-    Recyclability.RECYCLABLE,
-    'trace-low-confidence',
-    confidence=0.4,
-)
-assert rec.recommendation_type == RecommendationType.UNCERTAIN
+color = mapper.map_to_color(Material.PLASTIC, 'trace-direct-mapping')
+assert isinstance(color, BinColor)
+assert color == BinColor.WHITE
 EOF"
 
 check "mapper_started and mapper_complete logs include trace_id" "$PYTHON - << 'EOF'
@@ -301,11 +258,10 @@ cat > "$REPORT_PATH" << EOF
 - [x] \`map_to_color\` nunca lanza excepción para ningún \`Material\`
 - [x] Todos los valores de \`Material\` tienen color asignado
 
-### Conditional / Double-Color Recommendations
-- [x] Contaminated recyclable (p.ej. plástico sucio) → recomendación CONDICIONAL
-- [x] Si está limpio → BLANCO (primary_bin)
-- [x] Si está sucio / con residuos → NEGRO (alternative_bin)
-- [x] Recomendaciones UNCERTAIN cuando la confianza es baja
+### Filosofía Operativa
+- [x] Estudiantes solo clasifican por MATERIAL (no se les pide lavar recipientes)
+- [x] Recicladores de oficio deciden qué vale la pena limpiar según valor de mercado
+- [x] La limpieza ocurre fuera del flujo de UX del estudiante
 
 ### Logging
 - [x] Log \`mapper_started\` con \`trace_id\` y material
@@ -317,7 +273,6 @@ cat > "$REPORT_PATH" << EOF
 - [x] Tests de mapping PLASTIC / PAPER / ORGANIC / OTHER
 - [x] Tests de mapping para todos los materiales
 - [x] Tests de fallback y seguridad (sin excepciones)
-- [x] Tests de recomendaciones condicionales (WHITE/BLACK)
 - [x] Coverage ~100% para \`app.agents.mapper\`
 
 ---

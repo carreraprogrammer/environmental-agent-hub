@@ -1,9 +1,9 @@
 # EDV-54 Validation Report
 ## Implementar Mapper Agent (WasteMaterial → BinColor)
 
-**Fecha:** 2025-11-18 15:31:28
+**Fecha:** 2025-11-18 17:13:16
 **Ticket:** EDV-54
-**Pass Rate:** 100% (26/26)
+**Pass Rate:** 100% (22/22)
 
 ---
 
@@ -34,11 +34,10 @@
 - [x] `map_to_color` nunca lanza excepción para ningún `Material`
 - [x] Todos los valores de `Material` tienen color asignado
 
-### Conditional / Double-Color Recommendations
-- [x] Contaminated recyclable (p.ej. plástico sucio) → recomendación CONDICIONAL
-- [x] Si está limpio → BLANCO (primary_bin)
-- [x] Si está sucio / con residuos → NEGRO (alternative_bin)
-- [x] Recomendaciones UNCERTAIN cuando la confianza es baja
+### Filosofía Operativa
+- [x] Estudiantes solo clasifican por MATERIAL (no se les pide lavar recipientes)
+- [x] Recicladores de oficio deciden qué vale la pena limpiar según valor de mercado
+- [x] La limpieza ocurre fuera del flujo de UX del estudiante
 
 ### Logging
 - [x] Log `mapper_started` con `trace_id` y material
@@ -50,7 +49,6 @@
 - [x] Tests de mapping PLASTIC / PAPER / ORGANIC / OTHER
 - [x] Tests de mapping para todos los materiales
 - [x] Tests de fallback y seguridad (sin excepciones)
-- [x] Tests de recomendaciones condicionales (WHITE/BLACK)
 - [x] Coverage ~100% para `app.agents.mapper`
 
 ---

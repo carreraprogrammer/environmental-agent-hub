@@ -265,6 +265,31 @@ La tecnología es el **vehículo**, el ambiente es el **destino**.
 
 ---
 
+## 🔄 Decisión Pragmática: Simplificación del Mapper
+
+### Contexto Operativo del Reciclaje en Campus
+
+En la práctica diaria del reciclaje universitario en Colombia:
+- Estudiantes **no** lavan recipientes en el punto de disposición.
+- Recicladores de oficio (formales e informales) son quienes **deciden qué limpiar** según valor de mercado.
+- La infraestructura del campus no está diseñada para que el estudiante lave residuos en el momento del descarte.
+
+Por eso, el sistema:
+- ✅ Pide a estudiantes solo una tarea simple y realista: **clasificar por tipo de material**.
+- ✅ Implementa un `Mapper` simple: `Material → BinColor` (NTC 24 + sistema de 3 colores de campus).
+- ✅ Confía en recicladores de oficio para la decisión de limpieza y procesamiento.
+- ❌ No incorpora lógica compleja de “limpio/sucio” en la UX, que sería subjetiva y poco práctica.
+
+### Impacto en la Tesis
+
+Esta decisión:
+- Refuerza la validez externa del sistema (se ajusta a la **realidad operativa** colombiana).
+- Aumenta la probabilidad de **participación estudiantil** (UX simple, sin fricción).
+- Reconoce y respeta el **rol experto de los recicladores** en la cadena de valor.
+- Simplifica la arquitectura sin perder la calidad de los **datos ambientales** recolectados.
+
+---
+
 **Versión:** 1.0 - Noviembre 2025
 **Autor:** Daniel Carrera - Ingeniero Ambiental
 **Propósito:** Clarificación de enfoque para defensa de tesis
