@@ -1,0 +1,74 @@
+# Backend Waste Types Catalog
+# This file serves as a local fallback when Backend Rails is unavailable.
+# Structure mirrors the Backend API response format.
+#
+# Each waste type has:
+# - code: Unique identifier used by Backend (UPPERCASE_SNAKE_CASE)
+# - category: Material category (PLASTIC, METAL, GLASS, PAPER, ORGANIC)
+# - Additional matching attributes vary by category
+
+waste_types:
+  # PLASTIC types
+  - code: PET_BOTTLE_500ML
+    category: PLASTIC
+    volume_range: [400, 600]
+    material_type: PET
+    description: Botella PET 500ml
+
+  - code: PET_BOTTLE_1500ML
+    category: PLASTIC
+    volume_range: [1300, 1700]
+    material_type: PET
+    description: Botella PET 1.5L
+
+  - code: HDPE_BOTTLE
+    category: PLASTIC
+    material_type: HDPE
+    description: Botella HDPE
+
+  - code: PLASTIC_OTHER
+    category: PLASTIC
+    description: Otros plasticos
+
+  # METAL types
+  - code: ALUMINUM_CAN
+    category: METAL
+    material_type: aluminum
+    description: Lata de aluminio
+
+  - code: STEEL_CAN
+    category: METAL
+    material_type: steel
+    description: Lata de acero
+
+  # GLASS types
+  - code: GLASS_BOTTLE_CLEAR
+    category: GLASS
+    color: clear
+    description: Botella de vidrio transparente
+
+  - code: GLASS_BOTTLE_COLORED
+    category: GLASS
+    color: colored
+    description: Botella de vidrio de color
+
+  # PAPER types
+  - code: PAPER_WHITE_A4
+    category: PAPER
+    paper_type: white
+    description: Papel blanco A4
+
+  - code: CARDBOARD_BOX
+    category: PAPER
+    container_type: box
+    description: Caja de carton
+
+  - code: NEWSPAPER
+    category: PAPER
+    paper_type: newspaper
+    description: Periodico
+
+  # ORGANIC types
+  - code: FOOD_WASTE
+    category: ORGANIC
+    description: Residuos de comida
