@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     BACKEND_API_URL: str = Field(default="http://localhost:3000/api/v1")
     BACKEND_TIMEOUT: int = Field(default=3)
 
+    # Testing / tooling flags (non-functional)
+    RUN_INTEGRATION_TESTS: bool | None = Field(
+        default=None,
+        description="If true, enable slow integration tests that hit external APIs.",
+    )
+
     @field_validator("OPENAI_API_KEY", "GOOGLE_API_KEY", "ROBOFLOW_API_KEY")
     @classmethod
     def validate_api_keys_not_empty(cls, value: str, info: ValidationInfo) -> str:

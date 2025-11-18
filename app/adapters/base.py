@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Final
+from typing import Any, Final
 
 from app.schemas.domain import ClassificationResult
 
@@ -17,7 +17,34 @@ class ClassifierAdapter(ABC):
     async def classify(
         self, image_url: str, *, trace_id: str | None = None
     ) -> ClassificationResult:
-        """Classify a waste material from an image URL."""
+        """
+        Classify a waste material from an image URL (V3 compatibility).
+
+        DEPRECATED: Use classify_material() instead for V4 unified classification.
+        """
+
+    @abstractmethod
+    async def classify_material(
+        self, image_data: bytes, *, trace_id: str | None = None
+    ) -> dict[str, Any]:
+        """
+        Perform unified material classification (V4).
+
+        Returns complete classification with per-field confidences:
+        - material: Material type with confidence
+        - subtype: Specific subtype with recycling code and confidence
+        - condition: Physical condition with confidence
+        - volume: Volume estimation with source and confidence
+        - recyclability: Recyclability assessment with confidence
+        - reasoning: Model's explanation
+
+        Args:
+            image_data: Image bytes (JPEG, PNG, WEBP)
+            trace_id: Request trace ID for logging
+
+        Returns:
+            Dict with classification results and per-field confidences
+        """
 
     @property
     @abstractmethod

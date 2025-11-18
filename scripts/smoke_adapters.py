@@ -1,6 +1,13 @@
 """
 Simple smoke test for OpenAI, Google Gemini, and Roboflow adapters.
 
+This script exercises the **V3-style** `classify(image_url)` method to quickly
+verify that adapters are correctly configured and can return a basic
+`ClassificationResult` (material + confidence).
+
+For full V4 unified classification (MaterialClassifier + `classify_material`),
+see the MaterialClassifier tests and integration pipeline.
+
 Usage examples:
 
   # Test all providers with a sample plastic bottle image
@@ -113,4 +120,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

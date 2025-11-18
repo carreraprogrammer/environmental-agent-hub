@@ -1,6 +1,8 @@
-# Agent Hub - AI Orchestrator
+# Agent Hub - AI Orchestrator V4
 
-Waste classification system with interchangeable AI models (GPT-4, Gemini, Roboflow).
+Waste classification system with interchangeable AI models (GPT-4, Claude, Gemini) optimized for edge + backend hybrid architecture.
+
+> **Latest:** V4.0.0 introduces 70% faster classification, 65% cheaper costs, and unified MaterialClassifier. See [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## 🎯 Features
 
@@ -138,7 +140,76 @@ railway logs
 
 ## 🏛️ Architecture
 
-### Complete AI Pipeline (10 Agents)
+### V4 Architecture (Hybrid Edge + Backend) 🆕
+
+**Major improvements in V4:**
+- **70% faster:** 3-5s → 0.8-1.2s latency
+- **65% cheaper:** $0.031 → $0.011 per request
+- **Unified classification:** 3 agents merged into MaterialClassifier
+- **Per-field confidences:** Granular accuracy tracking
+- **Claude Sonnet 4.5:** Full Anthropic support
+
+#### Core Pipeline V4 (5-6 Agents)
+
+1. **Router** → Request validation
+2. **PreValidator V4** → Two-layer validation
+   - Layer 1: Technical (format, size, dimensions)
+   - Layer 2: Roboflow Object Detection API ($0.001 vs $0.010 GPT-4o-mini)
+3. **MaterialClassifier V4** → **UNIFIED** classification in ONE LLM call
+   - Material base (PLASTIC, PAPER, GLASS, METAL, etc.)
+   - Subtype (PET, HDPE, recycling codes)
+   - Physical condition (CLEAN, CONTAMINATED, DAMAGED)
+   - Volume estimation (OCR + estimation, in liters)
+   - Recyclability assessment
+   - **Per-field confidence scores** for partial success support
+4. **WasteTypeMapper** → Material+volume → waste_type_code *(pending)*
+5. **Mapper** → Material → Color NTC 2184 *(pending)*
+6. **Assembler** → Response construction *(pending)*
+
+#### Adapter Support V4
+
+- **OpenAI GPT-4 Vision** (gpt-4o, gpt-4-turbo): ✅ Full support
+- **Anthropic Claude** (claude-sonnet-4-5, claude-3-5-sonnet-20241022): ✅ Full support 🆕
+- **Google Gemini** (gemini-1.5-pro-vision): ✅ Full support
+- **Roboflow** (object detection): ✅ PreValidator only
+
+#### Key V4 Features
+
+**Unified Classification Schema:**
+```python
+@dataclass
+class MaterialClassificationResult:
+    material: MaterialField(type, confidence)
+    subtype: SubtypeField(value, recycling_code, confidence)
+    condition: ConditionField(value, confidence)
+    volume: VolumeField(liters, source, confidence)
+    recyclability: RecyclabilityField(value, confidence)
+    reasoning: str  # Model's explanation
+    partial_success: bool  # True if some fields have low confidence
+```
+
+**Partial Success Logic:**
+```python
+if material.confidence < 0.7:
+    raise ValueError("Material confidence too low")
+
+if subtype.confidence < 0.6:
+    subtype = None  # Continue with generic material
+
+if volume.confidence < 0.5:
+    volume = None  # Continue without volume
+```
+
+**Documentation:**
+- [Architecture Spec V4](agents-specs/V4/architecture-spec-agents_v4.md) - Complete V4 architecture
+- [Migration Guide V3→V4](docs/MIGRATION_V3_TO_V4.md) - How to migrate from V3
+- [CHANGELOG](CHANGELOG.md) - V4.0.0 release notes
+
+---
+
+### V3 Architecture (Legacy - Deprecated)
+
+#### Complete AI Pipeline (10 Agents)
 1. **Router** → Request validation
 2. **PreValidator** → Anti-troll detection (GPT-4o-mini)
 3. **Classifier** → Material classification (GPT-4o/Gemini/Roboflow)

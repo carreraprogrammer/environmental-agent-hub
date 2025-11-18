@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections import deque
 from datetime import datetime, timedelta
-from typing import ClassVar, Deque
+from typing import Any, ClassVar, Deque
 
 import google.generativeai as genai
 import httpx
 
 from app.adapters.base import ClassifierAdapter
+from app.agents.material_classifier import build_classification_prompt
 from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.domain import ClassificationResult, WasteMaterial
@@ -141,6 +143,132 @@ class GoogleClassifierAdapter(ClassifierAdapter):
         if "ORGANIC" in cleaned or "ORGÁNICO" in cleaned:
             return WasteMaterial.ORGANIC
         return WasteMaterial.OTHER
+
+    async def classify_material(
+        self, image_data: bytes, *, trace_id: str | None = None
+    ) -> dict[str, Any]:
+        """
+        Perform unified material classification with Gemini Vision (V4).
+
+        Args:
+            image_data: Image bytes
+            trace_id: Request trace ID
+
+        Returns:
+            Dict with complete classification and per-field confidences
+        """
+        bound_logger = logger.bind(trace_id=trace_id, adapter="google")
+        await self._wait_for_rate_limit(bound_logger)
+
+        # Prepare image part
+        image_part = self._prepare_image_part(image_data)
+        prompt = build_classification_prompt()
+
+        bound_logger.info(
+            "google_material_classification_request",
+            model=self.model_name_internal,
+        )
+
+        try:
+            response = await self.model.generate_content_async([prompt, image_part])
+            content = (response.text or "").strip()
+        except Exception as exc:  # pragma: no cover - SDK specific errors
+            bound_logger.error("google_api_error", error=str(exc))
+            raise
+
+        # Parse JSON response
+        result_dict = self._parse_material_classification(content, trace_id)
+
+        # Add metadata
+        result_dict["model_used"] = self.model_name
+        result_dict["model_provider"] = self.model_provider
+        result_dict["cost"] = self.cost_per_request
+
+        self._register_request()
+
+        bound_logger.info(
+            "google_material_classification_success",
+            material=result_dict.get("material", {}).get("type"),
+            subtype=result_dict.get("subtype", {}).get("value"),
+        )
+
+        return result_dict
+
+    def _prepare_image_part(self, image_data: bytes) -> dict[str, bytes | str]:
+        """
+        Prepare image bytes for Gemini API.
+
+        Args:
+            image_data: Image bytes
+
+        Returns:
+            Dict with mime_type and data for Gemini
+        """
+        if len(image_data) > _MAX_IMAGE_SIZE_BYTES:
+            raise ValueError("Image exceeds 10MB limit for Gemini")
+
+        # Detect mime type from image signature
+        if image_data.startswith(b"\x89PNG"):
+            mime_type = "image/png"
+        elif image_data.startswith(b"\xff\xd8"):
+            mime_type = "image/jpeg"
+        elif image_data.startswith(b"RIFF") and b"WEBP" in image_data[:20]:
+            mime_type = "image/webp"
+        else:
+            mime_type = "image/jpeg"  # Default
+
+        return {"mime_type": mime_type, "data": image_data}
+
+    def _parse_material_classification(
+        self, content: str, trace_id: str | None
+    ) -> dict[str, Any]:
+        """
+        Parse Gemini response into classification dict.
+
+        Args:
+            content: Raw response content (may contain markdown)
+            trace_id: Request trace ID
+
+        Returns:
+            Dict with classification fields
+        """
+        try:
+            # Strip markdown code blocks if present
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+
+            # Parse JSON
+            result_dict = json.loads(content)
+
+            # Validate required fields
+            if "material" not in result_dict:
+                raise ValueError("Missing 'material' field in response")
+            if "type" not in result_dict["material"]:
+                raise ValueError("Missing 'material.type' field in response")
+            if "confidence" not in result_dict["material"]:
+                raise ValueError("Missing 'material.confidence' field in response")
+
+            return result_dict
+
+        except Exception as e:
+            logger.warning(
+                "google_material_parse_error",
+                trace_id=trace_id,
+                raw_response=content[:200],
+                error=str(e),
+            )
+
+            # Fallback: return minimal valid structure
+            return {
+                "material": {"type": "OTHER", "confidence": 0.5},
+                "subtype": {"value": None, "recycling_code": None, "confidence": 0.0},
+                "condition": {"value": "CLEAN", "confidence": 0.5},
+                "volume": {"liters": None, "source": "ESTIMATED", "confidence": 0.0},
+                "recyclability": {"value": "RECYCLABLE", "confidence": 0.5},
+                "reasoning": f"Error parsing response: {str(e)}",
+            }
 
     @property
     def model_name(self) -> str:

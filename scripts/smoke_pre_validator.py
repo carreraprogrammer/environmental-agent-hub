@@ -1,5 +1,5 @@
 """
-Simple smoke test for PreValidator Agent.
+Simple smoke test for PreValidator Agent V4 (Roboflow + technical validation).
 
 Usage examples:
 
@@ -12,8 +12,9 @@ Usage examples:
   # Test expected non-waste (selfie, landscape)
   python scripts/smoke_pre_validator.py --image-url "https://..." --expect-no-waste
 
-Requires valid API key in .env:
-  - OPENAI_API_KEY for GPT-4o-mini
+Requires valid keys in .env:
+  - ROBOFLOW_API_KEY for Roboflow Object Detection
+  - ROBOFLOW_MODEL_ID (workspace/project/version), e.g. "workspace/waste-hsysm/6"
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ async def download_image(url: str) -> bytes:
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Smoke test for PreValidator")
+    parser = argparse.ArgumentParser(description="Smoke test for PreValidator V4")
     parser.add_argument(
         "--image-url",
         required=True,
@@ -59,22 +60,15 @@ async def main() -> None:
     parser.add_argument(
         "--expect-no-waste",
         action="store_true",
-        help="Expect has_waste=False (for testing rejection of selfies, etc.)",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=float,
-        default=2.0,
-        help="Timeout in seconds (default: 2.0 for testing)",
+        help="Expect is_valid=False (for testing rejection of selfies, etc.)",
     )
     args = parser.parse_args()
 
     print("\n" + "=" * 50)
-    print("PreValidator Agent - Smoke Test")
+    print("PreValidator Agent V4 - Smoke Test")
     print("=" * 50)
     print(f"Image URL: {args.image_url}")
-    print(f"Timeout: {args.timeout}s")
-    print(f"Expecting waste: {not args.expect_no_waste}")
+    print(f"Expecting valid (waste detected): {not args.expect_no_waste}")
     print("=" * 50 + "\n")
 
     try:
@@ -83,26 +77,33 @@ async def main() -> None:
         image_bytes = await download_image(args.image_url)
         print(f"✅ Downloaded {len(image_bytes)} bytes\n")
 
-        # Run PreValidator
-        print("🤖 Running PreValidator...")
-        async with PreValidator(timeout=args.timeout) as validator:
-            result = await validator.validate(image_bytes, "smoke-test-trace")
+        # Run PreValidator V4
+        print("🤖 Running PreValidator V4 (Roboflow + technical checks)...")
+        validator = PreValidator()
+        result = await validator.validate(image_bytes, "smoke-test-trace")
 
         # Display results
         print("\n" + "=" * 50)
         print("RESULTS")
         print("=" * 50)
-        print(f"has_waste: {result.has_waste}")
-        print(f"confidence: {result.confidence:.2f}")
+        print(f"is_valid: {result.is_valid}")
         print(f"reason: {result.reason}")
+        metadata = getattr(result, "metadata", {}) or {}
+        detections = metadata.get("detections") or []
+        classes = metadata.get("classes") or []
+        print(f"num_detections: {len(detections)}")
+        if classes:
+            print(f"classes: {classes}")
+        print(f"cost: {getattr(result, 'cost', 0.0)}")
+        print(f"fallback_used: {getattr(result, 'fallback_used', False)}")
         print("=" * 50 + "\n")
 
         # Verify expectations
-        if args.expect_no_waste and result.has_waste:
-            print("❌ FAILED: Expected has_waste=False but got True")
+        if args.expect_no_waste and result.is_valid:
+            print("❌ FAILED: Expected is_valid=False (no waste) but got True")
             sys.exit(1)
-        elif not args.expect_no_waste and not result.has_waste:
-            print("❌ FAILED: Expected has_waste=True but got False")
+        elif not args.expect_no_waste and not result.is_valid:
+            print("❌ FAILED: Expected is_valid=True (waste) but got False")
             sys.exit(1)
         else:
             print("✅ PASSED: Result matches expectations")
@@ -132,4 +133,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-
