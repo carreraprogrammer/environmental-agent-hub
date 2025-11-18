@@ -6,6 +6,8 @@ Tests cover:
 - Fallback behavior for unknown materials
 - Logging verification
 - Synchronous method verification (not async)
+
+PHILOSOPHY: Simple direct mapping. Waste pickers handle cleaning.
 """
 
 from __future__ import annotations
@@ -17,8 +19,7 @@ import pytest
 
 from app.agents.mapper import Mapper
 from app.schemas.bin_color import BinColor
-from app.schemas.bin_recommendation import BinRecommendation, RecommendationType
-from app.schemas.classification import Material, PhysicalCondition, Recyclability
+from app.schemas.classification import Material
 
 
 class TestMaterialToColorMapping:
@@ -295,6 +296,7 @@ class TestColorDistribution:
         mapper = Mapper()
 
         # University system: all recyclables go to WHITE
+        # Waste pickers handle cleaning if economically viable
         white_materials = [
             Material.PLASTIC,
             Material.GLASS,
@@ -329,446 +331,41 @@ class TestColorDistribution:
             assert color == BinColor.BLACK, f"{material.value} should map to BLACK"
 
 
-# =============================================================================
-# ENHANCED MAPPER TESTS (map_with_condition)
-# =============================================================================
-
-
-class TestMapWithConditionCleanRecyclables:
-    """Test map_with_condition for clean recyclable materials."""
-
-    def test_clean_plastic_definitive_white(self):
-        """Clean plastic should give definitive WHITE recommendation."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-        assert rec.alternative_bin is None
-        assert "blanca" in rec.instruction.lower()
-
-    def test_clean_glass_definitive_white(self):
-        """Clean glass should give definitive WHITE recommendation."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.GLASS,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-    def test_clean_paper_definitive_white(self):
-        """Clean paper should give definitive WHITE recommendation."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PAPER,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-
-class TestMapWithConditionContaminated:
-    """Test map_with_condition for contaminated materials - CONDITIONAL recommendations."""
-
-    def test_contaminated_plastic_conditional(self):
-        """Contaminated plastic should give CONDITIONAL recommendation."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CONTAMINATED,
-            Recyclability.RECYCLABLE_AFTER_CLEANING,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.CONDITIONAL
-        assert rec.alternative_bin == BinColor.BLACK
-        assert rec.condition_message is not None
-        assert rec.alternative_message is not None
-        assert "limpio" in rec.condition_message.lower()
-        assert "comida" in rec.alternative_message.lower() or "residuo" in rec.alternative_message.lower()
-
-    def test_contaminated_metal_conditional(self):
-        """Contaminated metal can should give CONDITIONAL recommendation."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.METAL,
-            PhysicalCondition.CONTAMINATED,
-            Recyclability.RECYCLABLE_AFTER_CLEANING,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.CONDITIONAL
-        assert rec.alternative_bin == BinColor.BLACK
-        assert rec.requires_user_decision is True
-
-    def test_partially_full_bottle_conditional(self):
-        """Partially full bottle should also be conditional."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.PARTIALLY_FULL,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-        )
-
-        assert rec.recommendation_type == RecommendationType.CONDITIONAL
-        assert rec.alternative_bin == BinColor.BLACK
-
-    def test_contaminated_paper_conditional(self):
-        """Contaminated paper (e.g., pizza box) should be conditional."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.CARDBOARD,
-            PhysicalCondition.CONTAMINATED,
-            Recyclability.RECYCLABLE_AFTER_CLEANING,
-            "test-trace",
-        )
-
-        assert rec.recommendation_type == RecommendationType.CONDITIONAL
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.alternative_bin == BinColor.BLACK
-
-
-class TestMapWithConditionNonRecyclable:
-    """Test map_with_condition for non-recyclable materials."""
-
-    def test_non_recyclable_goes_to_black(self):
-        """Explicitly non-recyclable material should go to BLACK."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.NON_RECYCLABLE,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.BLACK
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-        assert rec.alternative_bin is None
-        assert "no reciclable" in rec.instruction.lower()
-
-    def test_other_material_to_black(self):
-        """OTHER material should always go to BLACK."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.OTHER,
-            PhysicalCondition.CLEAN,
-            None,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.BLACK
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-
-class TestMapWithConditionOrganic:
-    """Test map_with_condition for organic materials."""
-
-    def test_organic_to_green(self):
-        """Organic material should go to GREEN."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.ORGANIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.COMPOSTABLE,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.GREEN
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-        assert "verde" in rec.instruction.lower() or "orgánico" in rec.instruction.lower()
-
-    def test_compostable_to_green(self):
-        """Compostable items should go to GREEN regardless of material."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PAPER,  # Paper can be compostable
-            PhysicalCondition.CONTAMINATED,
-            Recyclability.COMPOSTABLE,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.GREEN
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-
-class TestMapWithConditionSpecialCases:
-    """Test special processing and edge cases."""
-
-    def test_tetrapak_special_processing(self):
-        """Tetrapak with special processing should still go to WHITE."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.TETRAPAK,
-            PhysicalCondition.CLEAN,
-            Recyclability.REQUIRES_SPECIAL_PROCESSING,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-        assert "especial" in rec.instruction.lower()
-
-    def test_damaged_but_clean_still_recyclable(self):
-        """Damaged but clean item should still be recyclable."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.DAMAGED,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-        )
-
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-
-class TestMapWithConditionLowConfidence:
-    """Test map_with_condition with low confidence scores."""
-
-    def test_low_confidence_uncertain(self):
-        """Low confidence should give UNCERTAIN recommendation."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-            confidence=0.5,  # Below 0.6 threshold
-        )
-
-        assert rec.recommendation_type == RecommendationType.UNCERTAIN
-        assert "certeza" in rec.instruction.lower() or "identificar" in rec.instruction.lower()
-
-    def test_very_low_confidence_still_provides_recommendation(self):
-        """Even with very low confidence, should provide a recommendation."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.METAL,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-            confidence=0.3,
-        )
-
-        assert rec.primary_bin is not None
-        assert rec.recommendation_type == RecommendationType.UNCERTAIN
-
-    def test_borderline_confidence_passes(self):
-        """Confidence at 0.6 should be treated as valid."""
-        mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-trace",
-            confidence=0.6,
-        )
-
-        # 0.6 is the threshold, so this should NOT be uncertain
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-
-class TestMapWithConditionLogging:
-    """Test logging for map_with_condition."""
-
-    def test_logs_conditional_started(self):
-        """Test that mapper_conditional_started log is emitted."""
-        mapper = Mapper()
-
-        with patch("app.agents.mapper.logger") as mock_logger:
-            mapper.map_with_condition(
-                Material.PLASTIC,
-                PhysicalCondition.CONTAMINATED,
-                Recyclability.RECYCLABLE_AFTER_CLEANING,
-                "test-trace-789",
-            )
-
-            mock_logger.info.assert_any_call(
-                "mapper_conditional_started",
-                trace_id="test-trace-789",
-                agent="Mapper",
-                material="PLASTIC",
-                condition="CONTAMINATED",
-                recyclability="RECYCLABLE_AFTER_CLEANING",
-                confidence=1.0,
-            )
-
-    def test_logs_conditional_complete(self):
-        """Test that mapper_conditional_complete log is emitted."""
-        mapper = Mapper()
-
-        with patch("app.agents.mapper.logger") as mock_logger:
-            mapper.map_with_condition(
-                Material.PLASTIC,
-                PhysicalCondition.CONTAMINATED,
-                Recyclability.RECYCLABLE_AFTER_CLEANING,
-                "test-trace-789",
-            )
-
-            # Find the complete call
-            complete_calls = [
-                call for call in mock_logger.info.call_args_list
-                if call[0][0] == "mapper_conditional_complete"
-            ]
-
-            assert len(complete_calls) == 1
-            assert complete_calls[0][1]["has_alternative"] is True
-
-
-class TestBinRecommendationSchema:
-    """Test BinRecommendation schema functionality."""
-
-    def test_as_dict_serialization(self):
-        """Test that BinRecommendation serializes correctly."""
-        rec = BinRecommendation(
-            primary_bin=BinColor.WHITE,
-            recommendation_type=RecommendationType.CONDITIONAL,
-            instruction="Test instruction",
-            alternative_bin=BinColor.BLACK,
-            condition_message="If clean",
-            alternative_message="If dirty",
-        )
-
-        result = rec.as_dict()
-
-        assert result["primary_bin"] == "WHITE"
-        assert result["recommendation_type"] == "CONDITIONAL"
-        assert result["instruction"] == "Test instruction"
-        assert result["alternative_bin"] == "BLACK"
-        assert result["condition_message"] == "If clean"
-        assert result["alternative_message"] == "If dirty"
-
-    def test_is_conditional_property(self):
-        """Test is_conditional property."""
-        conditional = BinRecommendation(
-            primary_bin=BinColor.WHITE,
-            recommendation_type=RecommendationType.CONDITIONAL,
-            instruction="Test",
-            alternative_bin=BinColor.BLACK,
-        )
-
-        definitive = BinRecommendation(
-            primary_bin=BinColor.WHITE,
-            recommendation_type=RecommendationType.DEFINITIVE,
-            instruction="Test",
-        )
-
-        assert conditional.is_conditional is True
-        assert definitive.is_conditional is False
-
-    def test_requires_user_decision_property(self):
-        """Test requires_user_decision property."""
-        with_alternative = BinRecommendation(
-            primary_bin=BinColor.WHITE,
-            recommendation_type=RecommendationType.CONDITIONAL,
-            instruction="Test",
-            alternative_bin=BinColor.BLACK,
-        )
-
-        without_alternative = BinRecommendation(
-            primary_bin=BinColor.WHITE,
-            recommendation_type=RecommendationType.DEFINITIVE,
-            instruction="Test",
-        )
-
-        assert with_alternative.requires_user_decision is True
-        assert without_alternative.requires_user_decision is False
-
-
 class TestRealWorldScenarios:
-    """Test real-world waste classification scenarios."""
+    """Test real-world waste classification scenarios (simplified - no cleanliness check)."""
 
-    def test_dirty_pizza_box(self):
-        """Pizza box with grease should be conditional (can't recycle if greasy)."""
+    def test_pet_bottle(self):
+        """PET bottle goes to WHITE - waste pickers clean if needed."""
         mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.CARDBOARD,
-            PhysicalCondition.CONTAMINATED,
-            Recyclability.RECYCLABLE_AFTER_CLEANING,
-            "test-pizza-box",
-        )
+        color = mapper.map_to_color(Material.PLASTIC, "test-pet-bottle")
+        assert color == BinColor.WHITE
 
-        assert rec.recommendation_type == RecommendationType.CONDITIONAL
-        assert rec.alternative_bin == BinColor.BLACK
-
-    def test_empty_clean_pet_bottle(self):
-        """Empty, clean PET bottle should be definitive WHITE."""
+    def test_aluminum_can(self):
+        """Aluminum can goes to WHITE - waste pickers clean if needed."""
         mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-pet-bottle",
-        )
+        color = mapper.map_to_color(Material.METAL, "test-aluminum-can")
+        assert color == BinColor.WHITE
 
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-        assert rec.alternative_bin is None
-
-    def test_soda_can_with_residue(self):
-        """Soda can with liquid residue should be conditional."""
+    def test_pizza_box(self):
+        """Pizza box (cardboard) goes to WHITE - waste pickers decide if salvageable."""
         mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.METAL,
-            PhysicalCondition.PARTIALLY_FULL,
-            Recyclability.RECYCLABLE,
-            "test-soda-can",
-        )
-
-        assert rec.recommendation_type == RecommendationType.CONDITIONAL
-        assert rec.primary_bin == BinColor.WHITE
-        assert rec.alternative_bin == BinColor.BLACK
+        color = mapper.map_to_color(Material.CARDBOARD, "test-pizza-box")
+        assert color == BinColor.WHITE
 
     def test_food_scraps(self):
-        """Food scraps should go to GREEN."""
+        """Food scraps go to GREEN for composting."""
         mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.ORGANIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.COMPOSTABLE,
-            "test-food-scraps",
-        )
+        color = mapper.map_to_color(Material.ORGANIC, "test-food-scraps")
+        assert color == BinColor.GREEN
 
-        assert rec.primary_bin == BinColor.GREEN
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-    def test_styrofoam_non_recyclable(self):
-        """Styrofoam (often non-recyclable) should go to BLACK."""
+    def test_styrofoam(self):
+        """Styrofoam (if classified as OTHER) goes to BLACK."""
         mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.NON_RECYCLABLE,
-            "test-styrofoam",
-        )
+        color = mapper.map_to_color(Material.OTHER, "test-styrofoam")
+        assert color == BinColor.BLACK
 
-        assert rec.primary_bin == BinColor.BLACK
-        assert rec.recommendation_type == RecommendationType.DEFINITIVE
-
-    def test_blurry_image_low_confidence(self):
-        """Blurry image with low confidence should be UNCERTAIN."""
+    def test_tetrapak_carton(self):
+        """Tetrapak goes to WHITE - special processing handled by recyclers."""
         mapper = Mapper()
-        rec = mapper.map_with_condition(
-            Material.PLASTIC,
-            PhysicalCondition.CLEAN,
-            Recyclability.RECYCLABLE,
-            "test-blurry",
-            confidence=0.4,
-        )
-
-        assert rec.recommendation_type == RecommendationType.UNCERTAIN
+        color = mapper.map_to_color(Material.TETRAPAK, "test-tetrapak")
+        assert color == BinColor.WHITE
