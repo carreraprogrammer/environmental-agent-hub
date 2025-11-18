@@ -141,6 +141,17 @@ class VolumeField:
             "confidence": self.confidence,
         }
 
+    def to_ml(self) -> float | None:
+        """
+        Convert volume to milliliters for Backend API compatibility.
+
+        Returns:
+            Volume in milliliters, or None if liters is None
+        """
+        if self.liters is None:
+            return None
+        return self.liters * 1000
+
 
 @dataclass(slots=True)
 class RecyclabilityField:

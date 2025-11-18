@@ -40,11 +40,17 @@ class BackendClient:
         """
         return {"status": "queued", "payload": payload}
 
-    async def get_waste_types_catalog(self) -> list[dict[str, Any]]:
+    async def get_waste_types_catalog(
+        self,
+        organization_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Fetch waste types catalog from Backend Rails.
 
-        Makes GET request to /api/v1/waste_types endpoint.
+        Makes GET request to /api/v1/environmental/waste-types endpoint.
+
+        Args:
+            organization_id: Organization ID for scoped catalog (uses config default if None)
 
         Returns:
             List of waste type definitions from backend
@@ -54,11 +60,24 @@ class BackendClient:
             HTTPStatusError: If response status is not 2xx
             Exception: For other network/parsing errors
         """
-        url = f"{self.base_url}/waste_types"
+        url = f"{self.base_url}/environmental/waste-types"
+
+        # Use provided organization_id or fall back to config
+        org_id = organization_id or settings.BACKEND_ORGANIZATION_ID
+
+        # Build query params
+        params: dict[str, str] = {}
+        if org_id:
+            params["organization_id"] = org_id
+
+        # Build headers with optional auth token
+        headers: dict[str, str] = {}
+        if settings.BACKEND_SERVICE_TOKEN:
+            headers["Authorization"] = f"Bearer {settings.BACKEND_SERVICE_TOKEN}"
 
         try:
             async with httpx.AsyncClient(timeout=self.CATALOG_TIMEOUT) as client:
-                response = await client.get(url)
+                response = await client.get(url, params=params, headers=headers)
                 response.raise_for_status()
 
                 data = response.json()
@@ -75,6 +94,8 @@ class BackendClient:
                     "backend_waste_types_fetched",
                     url=url,
                     count=len(catalog),
+                    organization_id=org_id,
+                    authenticated=bool(settings.BACKEND_SERVICE_TOKEN),
                 )
 
                 return catalog

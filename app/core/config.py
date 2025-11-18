@@ -75,6 +75,14 @@ class Settings(BaseSettings):
     # Backend Rails API Configuration
     BACKEND_API_URL: str = Field(default="http://localhost:3000/api/v1")
     BACKEND_TIMEOUT: int = Field(default=3)
+    BACKEND_ORGANIZATION_ID: str | None = Field(
+        default=None,
+        description="Organization ID for Backend API requests (required for catalog sync)",
+    )
+    BACKEND_SERVICE_TOKEN: str | None = Field(
+        default=None,
+        description="Service account JWT token for authenticated Backend endpoints",
+    )
 
     # Testing / tooling flags (non-functional)
     RUN_INTEGRATION_TESTS: bool | None = Field(
