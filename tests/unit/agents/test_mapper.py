@@ -47,17 +47,17 @@ class TestMaterialToColorMapping:
         color = mapper.map_to_color(Material.TETRAPAK, "test-trace-004")
         assert color == BinColor.WHITE
 
-    def test_paper_maps_to_blue(self):
-        """Test PAPER material maps to BLUE bin."""
+    def test_paper_maps_to_white(self):
+        """Test PAPER material maps to WHITE bin (university 3-color system)."""
         mapper = Mapper()
         color = mapper.map_to_color(Material.PAPER, "test-trace-005")
-        assert color == BinColor.BLUE
+        assert color == BinColor.WHITE
 
-    def test_cardboard_maps_to_blue(self):
-        """Test CARDBOARD material maps to BLUE bin."""
+    def test_cardboard_maps_to_white(self):
+        """Test CARDBOARD material maps to WHITE bin (university 3-color system)."""
         mapper = Mapper()
         color = mapper.map_to_color(Material.CARDBOARD, "test-trace-006")
-        assert color == BinColor.BLUE
+        assert color == BinColor.WHITE
 
     def test_organic_maps_to_green(self):
         """Test ORGANIC material maps to GREEN bin."""
@@ -65,11 +65,11 @@ class TestMaterialToColorMapping:
         color = mapper.map_to_color(Material.ORGANIC, "test-trace-007")
         assert color == BinColor.GREEN
 
-    def test_other_maps_to_gray(self):
-        """Test OTHER material maps to GRAY bin."""
+    def test_other_maps_to_black(self):
+        """Test OTHER material maps to BLACK bin (university 3-color system)."""
         mapper = Mapper()
         color = mapper.map_to_color(Material.OTHER, "test-trace-008")
-        assert color == BinColor.GRAY
+        assert color == BinColor.BLACK
 
 
 class TestAllMaterialsMapped:
@@ -109,8 +109,8 @@ class TestAllMaterialsMapped:
 class TestFallbackBehavior:
     """Test fallback behavior for unknown materials."""
 
-    def test_fallback_to_gray_for_unknown_material(self):
-        """Test that .get() fallback returns GRAY for materials not in dict."""
+    def test_fallback_to_black_for_unknown_material(self):
+        """Test that .get() fallback returns BLACK for materials not in dict."""
         mapper = Mapper()
 
         # Create a mock Material that isn't in the dictionary
@@ -122,7 +122,7 @@ class TestFallbackBehavior:
 
         try:
             color = mapper.map_to_color(Material.PLASTIC, "test-trace-fallback")
-            assert color == BinColor.GRAY
+            assert color == BinColor.BLACK
         finally:
             # Restore the class-level dictionary
             Mapper.MATERIAL_TO_COLOR.clear()
@@ -215,9 +215,9 @@ class TestLogging:
 
         test_cases = [
             (Material.PLASTIC, "WHITE"),
-            (Material.PAPER, "BLUE"),
+            (Material.PAPER, "WHITE"),
             (Material.ORGANIC, "GREEN"),
-            (Material.OTHER, "GRAY"),
+            (Material.OTHER, "BLACK"),
         ]
 
         for material, expected_color in test_cases:
@@ -287,27 +287,25 @@ class TestMapperInstance:
 
 
 class TestColorDistribution:
-    """Test the distribution of colors across materials."""
+    """Test the distribution of colors across materials (university 3-color system)."""
 
     def test_white_bin_materials(self):
-        """Test which materials go in WHITE bin (recyclables)."""
+        """Test which materials go in WHITE bin (all recyclables including paper)."""
         mapper = Mapper()
 
-        white_materials = [Material.PLASTIC, Material.GLASS, Material.METAL, Material.TETRAPAK]
+        # University system: all recyclables go to WHITE
+        white_materials = [
+            Material.PLASTIC,
+            Material.GLASS,
+            Material.METAL,
+            Material.TETRAPAK,
+            Material.PAPER,
+            Material.CARDBOARD,
+        ]
 
         for material in white_materials:
             color = mapper.map_to_color(material, "test")
             assert color == BinColor.WHITE, f"{material.value} should map to WHITE"
-
-    def test_blue_bin_materials(self):
-        """Test which materials go in BLUE bin (paper/cardboard)."""
-        mapper = Mapper()
-
-        blue_materials = [Material.PAPER, Material.CARDBOARD]
-
-        for material in blue_materials:
-            color = mapper.map_to_color(material, "test")
-            assert color == BinColor.BLUE, f"{material.value} should map to BLUE"
 
     def test_green_bin_materials(self):
         """Test which materials go in GREEN bin (organics)."""
@@ -319,12 +317,12 @@ class TestColorDistribution:
             color = mapper.map_to_color(material, "test")
             assert color == BinColor.GREEN, f"{material.value} should map to GREEN"
 
-    def test_gray_bin_materials(self):
-        """Test which materials go in GRAY bin (other)."""
+    def test_black_bin_materials(self):
+        """Test which materials go in BLACK bin (non-recyclable)."""
         mapper = Mapper()
 
-        gray_materials = [Material.OTHER]
+        black_materials = [Material.OTHER]
 
-        for material in gray_materials:
+        for material in black_materials:
             color = mapper.map_to_color(material, "test")
-            assert color == BinColor.GRAY, f"{material.value} should map to GRAY"
+            assert color == BinColor.BLACK, f"{material.value} should map to BLACK"

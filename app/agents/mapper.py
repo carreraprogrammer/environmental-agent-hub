@@ -30,20 +30,20 @@ class Mapper:
         >>> print(color)  # BinColor.WHITE
     """
 
-    # Static mapping dictionary based on NTC 24
+    # Static mapping dictionary for university 3-color system
+    # Campus ecological points only have: WHITE, GREEN, BLACK
     MATERIAL_TO_COLOR: Dict[Material, BinColor] = {
         # WHITE: Aprovechable (reciclable)
         Material.PLASTIC: BinColor.WHITE,
         Material.GLASS: BinColor.WHITE,
         Material.METAL: BinColor.WHITE,
         Material.TETRAPAK: BinColor.WHITE,
-        # BLUE: Papel y cartón
-        Material.PAPER: BinColor.BLUE,
-        Material.CARDBOARD: BinColor.BLUE,
+        Material.PAPER: BinColor.WHITE,
+        Material.CARDBOARD: BinColor.WHITE,
         # GREEN: Orgánicos biodegradables
         Material.ORGANIC: BinColor.GREEN,
-        # GRAY: Otros / no clasificados
-        Material.OTHER: BinColor.GRAY,
+        # BLACK: No aprovechable (residuos ordinarios)
+        Material.OTHER: BinColor.BLACK,
     }
 
     def map_to_color(
@@ -68,8 +68,8 @@ class Mapper:
             material=material.value,
         )
 
-        # Get color from static mapping, fallback to GRAY for unknown materials
-        color = self.MATERIAL_TO_COLOR.get(material, BinColor.GRAY)
+        # Get color from static mapping, fallback to BLACK for unknown materials
+        color = self.MATERIAL_TO_COLOR.get(material, BinColor.BLACK)
 
         logger.info(
             "mapper_complete",
