@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
@@ -24,8 +24,16 @@ from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.classification import ValidationReason, ValidationResult
 
-if TYPE_CHECKING:
-    from roboflow import Roboflow
+# Roboflow runtime import (can be monkeypatched in tests)
+try:  # pragma: no cover - simple import wiring
+    from roboflow import Roboflow as _RoboflowRuntime  # type: ignore[import-not-found]
+except Exception:  # noqa: BLE001
+    _RoboflowRuntime = None
+
+Roboflow: Any | None = _RoboflowRuntime
+
+if TYPE_CHECKING:  # pragma: no cover - type hints only
+    from roboflow import Roboflow as RoboflowType
 
 
 class PreValidator:
@@ -72,8 +80,15 @@ class PreValidator:
             confidence_threshold: Detection confidence threshold (default: 0.4)
             overlap_threshold: Overlap threshold for NMS (default: 0.5)
         """
-        # Lazy import to avoid loading Roboflow unless needed
-        from roboflow import Roboflow
+        # Lazy import to avoid loading Roboflow unless needed; supports monkeypatching in tests
+        global Roboflow  # type: ignore[assignment]
+
+        if Roboflow is None:
+            try:
+                from roboflow import Roboflow as _RoboflowRuntime  # type: ignore[import-not-found]
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError("Roboflow SDK is required for PreValidator") from exc
+            Roboflow = _RoboflowRuntime
 
         self.model_id = model_id or settings.ROBOFLOW_MODEL_ID
         self.confidence_threshold = confidence_threshold or self.ROBOFLOW_CONFIDENCE_THRESHOLD
