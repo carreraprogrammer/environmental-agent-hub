@@ -6,5 +6,6 @@ when running scripts directly (e.g., `python scripts/...`).
 
 from __future__ import annotations
 
-__all__ = []
+from typing import List
 
+__all__: List[str] = []

@@ -194,12 +194,12 @@ class WasteTypeMapper:
                             count=len(data["waste_types"]),
                         )
                         return cast(list[dict[str, Any]], data["waste_types"])
-            except Exception as e:
+            except (OSError, yaml.YAMLError, TypeError, ValueError) as exc:
                 logger.warning(
                     "yaml_catalog_load_failed",
                     path=str(yaml_path),
-                    error=str(e),
-                    error_type=type(e).__name__,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
                 )
 
         # Use hardcoded catalog
@@ -245,13 +245,13 @@ class WasteTypeMapper:
                     trace_id=trace_id,
                     agent="WasteTypeMapper",
                 )
-        except Exception as e:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             logger.warning(
                 "backend_catalog_sync_failed",
                 trace_id=trace_id,
                 agent="WasteTypeMapper",
-                error=str(e),
-                error_type=type(e).__name__,
+                error=str(exc),
+                error_type=type(exc).__name__,
             )
             self.backend_catalog = None
 
@@ -384,20 +384,20 @@ class WasteTypeMapper:
         """
         if material == Material.PLASTIC:
             return self._match_plastic(characteristics, volume_ml, catalog)
-        elif material == Material.METAL:
+        if material == Material.METAL:
             return self._match_metal(characteristics, catalog)
-        elif material == Material.GLASS:
+        if material == Material.GLASS:
             return self._match_glass(characteristics, catalog)
-        elif material in (Material.PAPER, Material.CARDBOARD):
+        if material in (Material.PAPER, Material.CARDBOARD):
             return self._match_paper(characteristics, catalog)
-        elif material == Material.ORGANIC:
+        if material == Material.ORGANIC:
             return "FOOD_WASTE"
-        elif material == Material.TETRAPAK:
+        if material == Material.TETRAPAK:
             # TETRAPAK typically goes to PLASTIC_OTHER
             return "PLASTIC_OTHER"
-        else:
-            # OTHER material
-            return "PLASTIC_OTHER"
+
+        # OTHER material
+        return "PLASTIC_OTHER"
 
     def _match_plastic(
         self,
@@ -425,13 +425,21 @@ class WasteTypeMapper:
         if volume_ml is not None:
             for wt in plastic_types:
                 volume_range = wt.get("volume_range")
-                if volume_range:
-                    min_vol, max_vol = volume_range
-                    if min_vol <= volume_ml <= max_vol:
-                        # Also check material type if specified
-                        wt_material = wt.get("material_type", "").upper()
-                        if not wt_material or material_specific == wt_material or material_specific == "PET":
-                            return cast(str, wt["code"])
+                if not volume_range:
+                    continue
+
+                min_vol, max_vol = volume_range
+                if not min_vol <= volume_ml <= max_vol:
+                    continue
+
+                # Also check material type if specified
+                wt_material = wt.get("material_type", "").upper()
+                is_material_match = not wt_material or material_specific in (
+                    wt_material,
+                    "PET",
+                )
+                if is_material_match:
+                    return cast(str, wt["code"])
 
         # Try to match by material type
         if material_specific:
