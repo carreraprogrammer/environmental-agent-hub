@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# validation-edv64.sh - Validación completa del ticket EDV-64
+# ConsensusClassificationAgent (Multi-Model Ensemble) + Integración en Pipeline
+
+set -euo pipefail
+
+# Colores
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Evitar issues de Pydantic con CORS_ORIGINS heredado
+unset CORS_ORIGINS 2>/dev/null || true
+
+# Resolver root del proyecto (environmental-agent-hub/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
+PYTHON="$PROJECT_ROOT/venv/bin/python"
+PYTEST="$PROJECT_ROOT/venv/bin/pytest"
+
+PASS=0
+FAIL=0
+WARN=0
+
+section() {
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  $1"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+check() {
+  local description="$1"
+  local command="$2"
+
+  echo -e "\n${BLUE}Checking:${NC} $description"
+  if eval "$command" > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ PASS${NC}"
+    ((PASS++))
+    return 0
+  else
+    echo -e "${RED}❌ FAIL${NC}"
+    ((FAIL++))
+    return 1
+  fi
+}
+
+warn() {
+  local description="$1"
+  echo -e "${YELLOW}⚠️  WARN${NC} $description"
+  ((WARN++))
+}
+
+echo "======================================================="
+echo " EDV-64 VALIDATION - Multi-Model Consensus Agent"
+echo "======================================================="
+echo ""
+echo "Project Root: $PROJECT_ROOT"
+echo "Python: $PYTHON"
+echo "Pytest: $PYTEST"
+echo ""
+
+#
+# 0. Entorno / prerequisitos
+#
+section "0️⃣  ENVIRONMENT & PRE-REQUISITES"
+
+check "Running inside environmental-agent-hub" "[ -f app/main.py ]"
+check "Virtualenv Python exists" "test -x \"$PYTHON\""
+check "Pytest exists" "test -x \"$PYTEST\""
+
+#
+# 1. ConsensusClassificationAgent (núcleo)
+#
+section "1️⃣  CONSENSUS AGENT CORE"
+
+check "consensus_classifier.py existe" "test -f app/agents/consensus_classifier.py"
+check "ConsensusClassificationAgent importable" "$PYTHON - <<'EOF'
+from app.agents.consensus_classifier import ConsensusClassificationAgent
+print(ConsensusClassificationAgent)
+EOF"
+check "Estrategias definidas (agreement/confidence/tie-breaker)" "grep -q 'consensus_strategy' app/agents/consensus_classifier.py"
+
+#
+# 2. Integración en Pipeline
+#
+section "2️⃣  PIPELINE INTEGRATION"
+
+check "Pipeline referencia ConsensusClassificationAgent" "grep -q 'ConsensusClassificationAgent' app/orchestrator/pipeline.py"
+check "Pipeline activa consensus cuando CLASSIFIER_MODEL=consensus" "CLASSIFIER_MODEL=consensus $PYTHON - <<'EOF'
+from unittest.mock import patch
+from typing import Any
+from app.adapters.base import ClassifierAdapter
+from app.orchestrator.pipeline import Pipeline
+
+class _DummyAdapter(ClassifierAdapter):
+    def __init__(self, name: str):
+        self._name = name
+    async def classify(self, image_url: str, *, trace_id: str | None = None):
+        raise NotImplementedError
+    async def classify_material(self, image_data: bytes, *, trace_id: str | None = None) -> dict[str, Any]:
+        return {
+            "material": {"type": "PLASTIC", "confidence": 0.9},
+            "subtype": {"value": "PET", "recycling_code": "#1", "confidence": 0.9},
+            "condition": {"value": "CLEAN", "confidence": 0.9},
+            "volume": {"liters": 0.5, "source": "ESTIMATED", "confidence": 0.8},
+            "recyclability": {"value": "RECYCLABLE", "confidence": 0.9},
+            "reasoning": "dummy",
+            "cost": 0.0,
+            "model_used": self._name,
+            "model_provider": "dummy",
+            "metadata": {},
+        }
+    @property
+    def model_name(self):
+        return self._name
+    @property
+    def model_provider(self):
+        return "dummy"
+    @property
+    def cost_per_request(self):
+        return 0.0
+
+with patch('app.factories.classifier_factory.ClassifierFactory.create') as mock_create:
+    mock_create.side_effect = [_DummyAdapter("primary"), _DummyAdapter("secondary"), _DummyAdapter("tiebreaker")]
+    p = Pipeline()
+    assert p.consensus_mode is True
+EOF"
+check "Logs de metadata de consenso en pipeline" "grep -q 'pipeline_consensus_result' app/orchestrator/pipeline.py"
+
+#
+# 3. Configuración y modelos
+#
+section "3️⃣  CONFIG & MODELS"
+
+check "UNCERTAINTY_THRESHOLD en settings" "grep -q 'UNCERTAINTY_THRESHOLD' app/core/config.py"
+check "models.yaml incluye consenso" "grep -q '^  consensus:' config/models.yaml"
+check "Umbral de incertidumbre por defecto 0.70" "grep -q 'uncertainty_threshold: 0.70' config/models.yaml"
+
+#
+# 4. Test suites de consenso
+#
+section "4️⃣  TEST SUITES"
+
+check "Unit tests: ConsensusClassificationAgent" "$PYTEST -q tests/unit/test_consensus_classifier.py"
+check "Integration tests: escenarios de consenso" "$PYTEST -q tests/integration/test_consensus_scenarios.py"
+check "MaterialClassifier + pipeline V4 (regresión)" "$PYTEST -q tests/unit/test_material_classifier.py tests/integration/test_classification_pipeline_v4.py"
+
+#
+# 5. Validación manual / scripts
+#
+section "5️⃣  VALIDATION SCRIPTS"
+
+check "Script validate_consensus.py existe" "test -f scripts/validate_consensus.py"
+check "Validate consensus (synthetic cases)" "PYTHONPATH=. $PYTHON scripts/validate_consensus.py --cases 6"
+check "Fixture de imagen borrosa para smoke" "test -f tests/fixtures/images/pet_bottle_blurry.jpg"
+
+#
+# 6. Documentación & changelog
+#
+section "6️⃣  DOCS & CHANGELOG"
+
+check "README menciona consenso" "grep -qi 'consensus' README.md"
+check "CHANGELOG menciona consenso" "grep -qi 'consensus' CHANGELOG.md"
+check "Docs V4 incluyen consenso" "grep -qi 'consensus' agents-specs/V4/architecture-spec-agents_v4.md"
+
+#
+# Summary
+#
+section "✅  RESUMEN EDV-64"
+
+echo -e "${GREEN}PASS:${NC} $PASS"
+echo -e "${RED}FAIL:${NC} $FAIL"
+echo -e "${YELLOW}WARN:${NC} $WARN"
+
+if [ "$FAIL" -eq 0 ]; then
+  echo -e "\n${GREEN}🎉 EDV-64 COMPLETADO: Todos los checks pasan.${NC}"
+  exit 0
+else
+  echo -e "\n${RED}❌ EDV-64 INCOMPLETO: Revisa los checks fallidos.${NC}"
+  exit 1
+fi

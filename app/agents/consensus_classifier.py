@@ -67,7 +67,7 @@ from datetime import datetime
 from typing import Any
 
 from app.adapters.base import ClassifierAdapter
-from app.agent.material_classifier import MaterialClassifier
+from app.agents.material_classifier import MaterialClassifier
 from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.classification import (

@@ -99,6 +99,10 @@ class Settings(BaseSettings):
         default=None,
         description="Organization ID for Backend API requests (required for catalog sync)",
     )
+    BACKEND_STATION_ID: str | None = Field(
+        default=None,
+        description="Station ID for Backend API scan requests (used in testing)",
+    )
     BACKEND_SERVICE_TOKEN: str | None = Field(
         default=None,
         description="Service account JWT token for authenticated Backend endpoints",

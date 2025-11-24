@@ -17,16 +17,17 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from uuid import uuid4
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.adapters.base import ClassifierAdapter
-from app.agent.consensus_classifier import ConsensusClassificationAgent
+from app.agents.consensus_classifier import ConsensusClassificationAgent
 from app.core.config import settings
 from app.orchestrator.pipeline import Pipeline
 from app.schemas.classification import Material
-from app.schemas.requests import ClassifyRequest
+from app.schemas.requests import ClassifyRequestForm
 
 
 class MockAdapter(ClassifierAdapter):
@@ -107,12 +108,12 @@ async def test_pipeline_consensus_mode_fast_path() -> None:
         assert pipeline.consensus_mode is True
 
         # Create request
-        request = ClassifyRequest(
+        request = ClassifyRequestForm(
             image_bytes=b"fake-image-data",
-            scan_id="scan-integration-fast",
+            scan_id=uuid4(),
             station_id="station-1",
             tenant_id="tenant-1",
-            trace_id="trace-integration-fast",
+            trace_id=uuid4(),
         )
 
         # Execute
@@ -159,12 +160,12 @@ async def test_pipeline_consensus_mode_agreement_boost() -> None:
         pipeline = Pipeline()
 
         # Create request
-        request = ClassifyRequest(
+        request = ClassifyRequestForm(
             image_bytes=b"fake-image-data",
-            scan_id="scan-integration-agreement",
+            scan_id=uuid4(),
             station_id="station-1",
             tenant_id="tenant-1",
-            trace_id="trace-integration-agreement",
+            trace_id=uuid4(),
         )
 
         # Execute
@@ -205,12 +206,12 @@ async def test_pipeline_consensus_mode_confidence_based() -> None:
         pipeline = Pipeline()
 
         # Create request
-        request = ClassifyRequest(
+        request = ClassifyRequestForm(
             image_bytes=b"fake-image-data",
-            scan_id="scan-integration-confidence",
+            scan_id=uuid4(),
             station_id="station-1",
             tenant_id="tenant-1",
-            trace_id="trace-integration-confidence",
+            trace_id=uuid4(),
         )
 
         # Execute
@@ -246,12 +247,12 @@ async def test_pipeline_consensus_mode_latency() -> None:
         pipeline = Pipeline()
 
         # Create request
-        request = ClassifyRequest(
+        request = ClassifyRequestForm(
             image_bytes=b"fake-image-data",
-            scan_id="scan-integration-latency",
+            scan_id=uuid4(),
             station_id="station-1",
             tenant_id="tenant-1",
-            trace_id="trace-integration-latency",
+            trace_id=uuid4(),
         )
 
         # Execute and measure latency
@@ -310,12 +311,12 @@ async def test_consensus_cost_optimization() -> None:
             pipeline = Pipeline()
 
             # Create request
-            request = ClassifyRequest(
+            request = ClassifyRequestForm(
                 image_bytes=b"fake-image-data",
-                scan_id=f"scan-cost-{material.value}",
+                scan_id=uuid4(),
                 station_id="station-1",
                 tenant_id="tenant-1",
-                trace_id=f"trace-cost-{material.value}",
+                trace_id=uuid4(),
             )
 
             # Execute
@@ -357,12 +358,12 @@ async def test_consensus_no_waste_detection() -> None:
         pipeline = Pipeline()
 
         # Create request
-        request = ClassifyRequest(
+        request = ClassifyRequestForm(
             image_bytes=b"fake-image-data",
-            scan_id="scan-no-waste",
+            scan_id=uuid4(),
             station_id="station-1",
             tenant_id="tenant-1",
-            trace_id="trace-no-waste",
+            trace_id=uuid4(),
         )
 
         # Execute - should raise ValidationError
@@ -394,12 +395,12 @@ async def test_consensus_single_model_fallback() -> None:
         assert pipeline.consensus_mode is False  # Not in consensus mode
 
         # Create request
-        request = ClassifyRequest(
+        request = ClassifyRequestForm(
             image_bytes=b"fake-image-data",
-            scan_id="scan-single-model",
+            scan_id=uuid4(),
             station_id="station-1",
             tenant_id="tenant-1",
-            trace_id="trace-single-model",
+            trace_id=uuid4(),
         )
 
         # Execute

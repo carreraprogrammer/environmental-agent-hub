@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.adapters.base import ClassifierAdapter
-from app.agent.consensus_classifier import ConsensusClassificationAgent
+from app.agents.consensus_classifier import ConsensusClassificationAgent
 from app.schemas.classification import (
     ConditionField,
     Material,

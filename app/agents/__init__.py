@@ -1,27 +1,42 @@
 """
-[DEPRECATED] Legacy agents module - Use new locations instead.
+Agents module - AI Agents + Utilities for waste classification.
 
-This module is DEPRECATED. The architecture has been refactored for honesty:
+ARCHITECTURE CLARITY (V4):
 
-NEW LOCATIONS:
-- MaterialClassifier (AI AGENT) ’ app.agent.material_classifier
-- ColorMapper (UTIL) ’ app.utils.classification.color_mapper
-- WasteTypeMatcher (UTIL) ’ app.utils.classification.waste_type_matcher
-- ResponseAssembler (UTIL) ’ app.utils.classification.response_assembler
+AI AGENTS (2):
+- MaterialClassifier: Main classification agent (GPT-4o/Gemini/Claude)
+- ConsensusClassificationAgent: Multi-model ensemble for uncertain cases
 
-Imports below are provided for backward compatibility only.
-Update your imports to use the new locations.
+UTILITIES (Deterministic):
+- pre_validator: Roboflow-based waste detection (anti-troll)
+- waste_type_mapper: Material -> waste_type_code matching
+- assembler: Response JSON construction
+- mapper: Material -> bin color mapping
+- router: Request routing logic
+- feedback_coach: Educational message generation
+
+For new imports, prefer explicit imports:
+    from app.agents.material_classifier import MaterialClassifier
+    from app.agents.consensus_classifier import ConsensusClassificationAgent
 """
 
-# Backward compatibility imports
-from app.agent.material_classifier import MaterialClassifier
-from app.utils.classification.color_mapper import ColorMapper as Mapper
-from app.utils.classification.response_assembler import ResponseAssembler as Assembler
-from app.utils.classification.waste_type_matcher import WasteTypeMatcher as WasteTypeMapper
+# AI Agents
+from app.agents.consensus_classifier import ConsensusClassificationAgent
+from app.agents.material_classifier import MaterialClassifier
+
+# Utilities (for backward compatibility)
+from app.agents.assembler import Assembler
+from app.agents.mapper import Mapper
+from app.agents.pre_validator import PreValidator
+from app.agents.waste_type_mapper import WasteTypeMapper
 
 __all__ = [
+    # AI Agents
     "MaterialClassifier",
+    "ConsensusClassificationAgent",
+    # Utilities
+    "PreValidator",
+    "WasteTypeMapper",
     "Mapper",
     "Assembler",
-    "WasteTypeMapper",
 ]

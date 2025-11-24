@@ -39,8 +39,8 @@ import asyncio
 import time
 from typing import Any
 
-from app.agent.consensus_classifier import ConsensusClassificationAgent
-from app.agent.material_classifier import MaterialClassifier
+from app.agents.consensus_classifier import ConsensusClassificationAgent
+from app.agents.material_classifier import MaterialClassifier
 from app.utils.classification.color_mapper import ColorMapper
 from app.utils.classification.response_assembler import ResponseAssembler
 from app.utils.classification.waste_type_matcher import WasteTypeMatcher
@@ -603,8 +603,9 @@ class Pipeline:
                 suggestion="Mejora la iluminación o acerca más el objeto a la cámara",
             )
 
-        # If confidence between 0.3 and 0.6, downgrade to OTHER
-        if material_confidence < 0.6:
+        # If confidence is low, optionally downgrade to OTHER (less strict in consensus mode)
+        low_conf_threshold = 0.5 if self.consensus_mode else 0.6
+        if material_confidence < low_conf_threshold:
             logger.warning(
                 "low_confidence_downgrade",
                 trace_id=trace_id,
