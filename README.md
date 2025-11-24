@@ -60,21 +60,50 @@ uvicorn app.main:app --reload
 # http://localhost:8000/docs
 ```
 
-### Local Development (Docker)
+### Local Development (Docker) **⭐ Recommended**
+
+Docker simplifies the workflow to just 3 essential commands (vs 10+ commands with venv):
 
 ```bash
 # 1. Copy environment variables
 cp .env.example .env
 # Edit .env with your API keys
 
-# 2. Start services
-docker-compose -f docker/docker-compose.yml up
+# 2. Start services (with hot-reload)
+docker compose -f docker/docker-compose.yml up -d
 
-# 3. Open browser
+# 3. View logs
+docker compose -f docker/docker-compose.yml logs -f
+
+# 4. Open browser
 # http://localhost:8000/docs
+
+# Stop services
+docker compose -f docker/docker-compose.yml down
 ```
 
+**Features:**
+- ✅ Hot-reload enabled (code changes apply automatically)
+- ✅ Volume mounts for `app/` and `config/` directories
+- ✅ Health checks configured
+- ✅ No need to manage Python virtual environments
+
 ## 🧪 Testing
+
+### With Docker (Recommended)
+
+```bash
+# Run all tests inside container
+docker compose -f docker/docker-compose.yml exec agent-hub pytest tests/ -v
+
+# Run specific test file
+docker compose -f docker/docker-compose.yml exec agent-hub pytest tests/unit/test_health.py -v
+
+# Run with coverage
+docker compose -f docker/docker-compose.yml exec agent-hub pytest --cov=app --cov-report=html
+```
+
+### With Python (Alternative)
 
 ```bash
 # Run all tests

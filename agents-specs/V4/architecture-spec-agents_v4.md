@@ -1,5 +1,24 @@
 # Agent Hub – Architecture Specification V4.0 (Hybrid Edge + Backend)
 
+## 🔄 ACTUALIZACIÓN V4.1 (Nov 2025 - EDV-58)
+
+**PreValidator eliminado del backend:**
+- ✅ **Validación movida a client-side** - backend recibe solo imágenes válidas
+- ✅ **5 processing agents + 1 Assembler** (era 7) - simplificación significativa
+- ✅ **$0.010/request** (era $0.011) - 9% más barato
+- ✅ **~1000ms latency** (era ~1200ms) - 17% más rápido
+- ✅ **Serverless-ready** - sin cold start de Roboflow (era 37s)
+
+**Razón de eliminación:**
+- Solo ahorraba $9/mes con <1% troll rate
+- Agregaba 200ms latency
+- Creaba false negatives
+- Industria estándar: validación client-side (OpenAI, Anthropic, Google)
+
+Ver: `/validations/EDV-58/PREVALIDATOR_ANALYSIS.md`
+
+---
+
 ## ⚠️ CONTEXTO - Tesis Ingeniería Ambiental
 
 **Este documento especifica la arquitectura técnica del Agent Hub Python V4.**
@@ -59,24 +78,26 @@ Latencia: 3-5 segundos
 Agentes: 10
 ```
 
-**V4 Architecture (Hybrid Edge + Backend):**
+**V4.1 Architecture (Client-Side Validation):**
 ```
-Cliente (Edge):
-  - Roboflow Object Detection (local) ← Implementación futura (EDV-XX)
+Cliente:
+  - Validación de imagen (formato, tamaño)
+  - Roboflow Object Detection (opcional, futuro)
   - Auto-captura + crop
   - UX inmediata (feedback visual)
 
-Backend Pipeline (5-6 agentes):
+Backend Pipeline (6 agentes):
   1. Router
-  2. PreValidator (Roboflow API + validaciones técnicas) ← $0.001, <500ms
-  3. MaterialClassifier (fusión de 3 agentes) ← $0.010, <1.5s
-  4. WasteTypeMapper ← Pendiente
-  5. Mapper ← Pendiente
-  6. Assembler ← Pendiente
+  2. MaterialClassifier (clasificación unificada) ← $0.010, <1000ms
+  3. VolumeEstimator
+  4. Mapper
+  5. WasteTypeMapper
+  6. FeedbackCoach
+  7. Assembler (empaqueta response, no en agents_executed)
 
-Costo total: $0.011/request (68% reducción)
-Latencia: 0.8-1.2 segundos (70% mejora)
-Agentes: 5-6
+Costo total: $0.010/request (68% reducción vs V3, 9% vs V4.0)
+Latencia: ~1000ms (70% mejora vs V3, 17% vs V4.0)
+Agentes backend: 6 (5 processing + 1 assembler)
 ```
 
 ### 1.2 Decisiones Arquitectónicas Clave
@@ -91,13 +112,20 @@ Agentes: 5-6
 
 **Implementación futura:** Ticket EDV-XX
 
-#### 1.2.2 PreValidator Optimizado
-**Decisión:** Cambiar de GPT-4o-mini a Roboflow Object Detection API
+#### 1.2.2 PreValidator Eliminado (V4.1 - EDV-58)
+**Decisión:** Eliminar PreValidator del backend, validación client-side
 **Rationale:**
-- **Costo:** GPT-4o-mini ($0.010) → Roboflow ($0.001) = 90% ahorro
-- **Latencia:** 500ms → <200ms = 60% mejora
-- **Precisión:** Similar para detección binaria (waste vs no-waste)
-- **Especialización:** Roboflow entrenado específicamente en waste detection
+- **ROI negativo:** Solo ahorra $9/mes con <1% troll rate (necesita >0.75% para justificar)
+- **Latencia:** Elimina 200ms de overhead
+- **False negatives:** PreValidator podía rechazar imágenes válidas
+- **Industria:** OpenAI, Anthropic, Google no usan PreValidator separado
+- **Serverless:** Roboflow tiene 37s cold start (inviable para serverless)
+- **Simplificación:** 7 agentes → 6 agentes
+
+**Alternativa implementada:** Validación client-side
+- Formato/tamaño verificado antes de enviar
+- UX inmediata (no espera respuesta backend)
+- Zero backend cost
 
 **Implementación:** Two-layer validation
 1. **Layer 1:** Technical validations (formato, tamaño, dimensiones)

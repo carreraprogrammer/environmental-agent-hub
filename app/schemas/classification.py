@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 class Material(str, Enum):
     """Material base classification."""
 
+    NO_WASTE = "NO_WASTE"
     PLASTIC = "PLASTIC"
     PAPER = "PAPER"
     GLASS = "GLASS"

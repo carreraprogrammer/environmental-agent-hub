@@ -12,7 +12,7 @@ import google.generativeai as genai
 import httpx
 
 from app.adapters.base import ClassifierAdapter
-from app.agents.material_classifier import build_classification_prompt
+from app.agent.material_classifier import build_classification_prompt
 from app.core.config import settings
 from app.core.logging import logger
 from app.schemas.domain import ClassificationResult, WasteMaterial
