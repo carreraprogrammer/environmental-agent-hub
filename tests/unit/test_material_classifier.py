@@ -131,7 +131,7 @@ async def test_confidence_per_field() -> None:
 async def test_reject_low_material_confidence() -> None:
     """MaterialClassifier rejects classification if material confidence too low."""
     data = _base_result_dict()
-    data["material"]["confidence"] = 0.5  # < MIN_MATERIAL_CONFIDENCE
+    data["material"]["confidence"] = 0.2  # < MIN_MATERIAL_CONFIDENCE
 
     adapter = DummyAdapter(data)
     classifier = MaterialClassifier(adapter)

@@ -60,7 +60,27 @@ class Settings(BaseSettings):
     # Active classifier
     CLASSIFIER_MODEL: str = Field(
         default="openai-gpt4",
-        description="Active model: openai-gpt4|openai-gpt4o|claude|gemini|roboflow",
+        description="Active model: openai-gpt4|openai-gpt4o|claude|gemini|roboflow|consensus",
+    )
+
+    # Consensus Configuration
+    UNCERTAINTY_THRESHOLD: float = Field(
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold below which consensus is triggered (default: 0.70)",
+    )
+    CONSENSUS_PRIMARY_MODEL: str = Field(
+        default="openai-gpt4o",
+        description="Primary model for consensus (default: openai-gpt4o)",
+    )
+    CONSENSUS_SECONDARY_MODEL: str = Field(
+        default="gemini",
+        description="Secondary model for consensus (default: gemini)",
+    )
+    CONSENSUS_TIEBREAKER_MODEL: str = Field(
+        default="roboflow",
+        description="Tiebreaker model for consensus (default: roboflow)",
     )
 
     # Anthropic Configuration (Optional)
@@ -78,6 +98,10 @@ class Settings(BaseSettings):
     BACKEND_ORGANIZATION_ID: str | None = Field(
         default=None,
         description="Organization ID for Backend API requests (required for catalog sync)",
+    )
+    BACKEND_STATION_ID: str | None = Field(
+        default=None,
+        description="Station ID for Backend API scan requests (used in testing)",
     )
     BACKEND_SERVICE_TOKEN: str | None = Field(
         default=None,
@@ -104,7 +128,7 @@ class Settings(BaseSettings):
     def validate_classifier_model(cls, value: str) -> str:
         """Validate the selected classifier model."""
 
-        allowed = ["openai-gpt4", "openai-gpt4o", "claude", "gemini", "roboflow"]
+        allowed = ["openai-gpt4", "openai-gpt4o", "claude", "gemini", "roboflow", "consensus"]
         if value not in allowed:
             raise ValueError(f"CLASSIFIER_MODEL must be one of {allowed}")
         return value

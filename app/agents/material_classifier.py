@@ -55,7 +55,8 @@ class MaterialClassifier:
     """
 
     # Confidence thresholds for partial success
-    MIN_MATERIAL_CONFIDENCE = 0.7  # Material must be high confidence
+    # Keep this aligned with pipeline low-confidence handling so consensus can trigger on <0.70 cases.
+    MIN_MATERIAL_CONFIDENCE = 0.3  # Material must clear a minimal confidence floor
     MIN_SUBTYPE_CONFIDENCE = 0.6  # Subtype can be lower
     MIN_VOLUME_CONFIDENCE = 0.5  # Volume can be even lower
 
