@@ -367,12 +367,12 @@ class Pipeline:
         >>> response = await pipeline.process(request)
     """
 
-    # Global timeout for entire pipeline (5 seconds)
-    TOTAL_TIMEOUT = 5.0
+    # Global timeout for entire pipeline (20 seconds for real APIs - increased for vision models)
+    TOTAL_TIMEOUT = 20.0
 
     # Agent-specific timeouts (seconds)
     AGENT_TIMEOUTS = {
-        "classifier": 2.0,
+        "classifier": 18.0,  # Increased for Vision APIs (Gemini/GPT-4o can take 6-10s)
         "volume_estimator": 0.5,
         "mapper": 0.1,
         "waste_type_mapper": 0.5,

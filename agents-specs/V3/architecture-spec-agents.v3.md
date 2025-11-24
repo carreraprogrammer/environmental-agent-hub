@@ -801,12 +801,14 @@ class RoboflowClassifierAdapter(ClassifierAdapter):
     def _parse_roboflow_response(self, prediction) -> tuple[WasteMaterial, float]:
         """Parse Roboflow prediction to WasteMaterial"""
         
-        # Roboflow devuelve predictions con class y confidence
+        # Roboflow devuelve class, pero puede no enviar confidence; usar 1.0 por defecto
         if not prediction.predictions:
             return WasteMaterial.OTHER, 0.3
         
-        # Tomar la predicción con mayor confidence
-        best_prediction = max(prediction.predictions, key=lambda p: p.confidence)
+        best_prediction = max(
+            prediction.predictions,
+            key=lambda p: getattr(p, "confidence", 1.0),
+        )
         
         # Mapear clase de Roboflow a WasteMaterial
         class_mapping = {

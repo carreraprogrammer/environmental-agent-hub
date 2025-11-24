@@ -1,0 +1,250 @@
+=======================================================
+ EDV-59 VALIDATION - FastAPI Endpoint POST /classify
+=======================================================
+
+Project Root: /Users/danielcarrera/Desktop/CDD/environmental-agent-hub
+Python: /Users/danielcarrera/Desktop/CDD/environmental-agent-hub/venv/bin/python
+Pytest: /Users/danielcarrera/Desktop/CDD/environmental-agent-hub/venv/bin/pytest
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  0️⃣  ENVIRONMENT & PRE-REQUISITES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m Running inside environmental-agent-hub
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Virtualenv Python exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Pytest exists
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1️⃣  ENDPOINT POST /classify
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m classify.py exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m classify.py importable
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Route is /api/v1/classify
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Response model is ClassifyResponse
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Router included in main.py
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2️⃣  DETECCIÓN DE FORMATO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m Detects multipart/form-data format
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Detects JSON format
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Returns 400 if neither format
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Logs input_format
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3️⃣  PROCESAMIENTO MULTIPART (PREFERIDO)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m Reads image with await image.read()
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Builds ClassifyRequestForm
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Supports scan_id from form
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Supports station_id from form
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Supports tenant_id from form
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Supports trace_id from form (optional)
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  4️⃣  PROCESAMIENTO JSON (LEGACY)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m ClassifyRequest schema exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m ClassifyRequest importable
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Validates image_url present
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m JSON backward compatible
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  5️⃣  EJECUCIÓN PIPELINE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m Pipeline dependency injection
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Calls pipeline.process()
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Measures latency
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Includes trace_id in logs
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  6️⃣  BACKGROUND TASK S3 UPLOAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m BackgroundTasks parameter present
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Schedules S3 upload for bytes format
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m S3Service dependency injection exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Sets s3_upload_status = pending
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  7️⃣  ERROR HANDLING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m ValidationError → 400 Bad Request
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m TimeoutError → 504 Gateway Timeout
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Exception → 500 Internal Server Error
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Error responses include suggestion
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  8️⃣  RESPONSE HEADERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m Sets X-Trace-Id header
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Sets X-Request-Duration header
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Content-Type is application/json
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  9️⃣  LOGGING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m Logs classify_request_received
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Logs classify_request_completed
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Logs classify_request_rejected on ValidationError
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Logs classify_request_timeout on TimeoutError
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Logs classify_request_failed on Exception
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m All logs include trace_id
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔟  DEPENDENCY INJECTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m dependencies.py exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m get_pipeline function exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m get_pipeline returns Pipeline
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m get_s3_service function exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m get_s3_service returns S3Service
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1️⃣1️⃣  INTEGRATION TESTS E2E
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m test_classify_endpoint.py exists
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test multipart request success
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test multipart with auto-generated IDs
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test JSON request success
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test 400 when no input provided
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test ValidationError (NO_WASTE)
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test ValidationError (LOW_CONFIDENCE)
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test TimeoutError (504)
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test ClassificationError (500)
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test unexpected error (500)
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test response headers present
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test background S3 upload scheduled
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test trace_id propagation multipart
+[0;32m✅ PASS[0m
+
+[0;34mChecking:[0m Test trace_id propagation JSON
+[0;32m✅ PASS[0m
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1️⃣2️⃣  TEST COVERAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[0;34mChecking:[0m All classify endpoint tests pass
+[0;32m✅ PASS[0m
+[1;33m⚠️  WARN[0m Coverage check skipped (set CHECK_COVERAGE=1 to enable)

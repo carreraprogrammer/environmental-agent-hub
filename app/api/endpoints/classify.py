@@ -30,14 +30,40 @@ from fastapi import Request as FastAPIRequest
 from fastapi import Response
 from pydantic import ValidationError as PydanticValidationError
 
+from app.agents.fast_classifier import FastClassifier
 from app.api.dependencies import get_pipeline, get_s3_service
+from app.core.config import settings
 from app.core.logging import logger
+from app.factories.classifier_factory import ClassifierFactory
+from app.orchestrator.fast_pipeline import ValidationPipeline
 from app.orchestrator.pipeline import ClassificationError, Pipeline, ValidationError
 from app.schemas.requests import ClassifyRequest, ClassifyRequestForm
 from app.schemas.responses import ClassifyResponse
 from app.services.s3_service import S3Service
+from app.utils.classification.response_assembler import ResponseAssembler
 
 router = APIRouter(prefix="/api/v1", tags=["classification"])
+
+# Initialize Fast Path components (lazy loaded)
+_fast_classifier: FastClassifier | None = None
+_validation_pipeline: ValidationPipeline | None = None
+
+
+def get_fast_classifier() -> FastClassifier:
+    """Get or create FastClassifier instance."""
+    global _fast_classifier
+    if _fast_classifier is None:
+        roboflow_adapter = ClassifierFactory.create("roboflow")
+        _fast_classifier = FastClassifier(roboflow_adapter)
+    return _fast_classifier
+
+
+def get_validation_pipeline(main_pipeline: Pipeline) -> ValidationPipeline:
+    """Get or create ValidationPipeline instance."""
+    global _validation_pipeline
+    if _validation_pipeline is None:
+        _validation_pipeline = ValidationPipeline(main_pipeline)
+    return _validation_pipeline
 
 
 @router.post("/classify", response_model=ClassifyResponse)
@@ -249,14 +275,87 @@ async def classify_waste(
                 },
             )
 
-        # STEP 2: Execute pipeline
+        # STEP 2: Execute pipeline (Fast Path or Full Path)
         logger.info(
             "pipeline_execution_started",
             trace_id=request_trace_id,
             input_format=input_format,
+            fast_path_enabled=settings.ENABLE_FAST_PATH,
         )
 
-        result = await pipeline.process(request_data)
+        # Check if fast path should be used
+        if settings.ENABLE_FAST_PATH and input_format == "bytes":
+            # FAST PATH: Roboflow fast response + background validation
+            try:
+                fast_classifier = get_fast_classifier()
+                fast_result = await fast_classifier.classify_fast(
+                    image_data=image_bytes,
+                    trace_id=request_trace_id,
+                )
+                
+                # If confidence is high, return fast response and validate in background
+                if not fast_result["should_validate"]:
+                    logger.info(
+                        "fast_path_selected",
+                        trace_id=request_trace_id,
+                        confidence=fast_result["confidence"],
+                        latency_ms=fast_result["latency_ms"],
+                    )
+                    
+                    # Build fast response
+                    assembler = ResponseAssembler()
+                    result = assembler.build_response(
+                        material=fast_result["material"],
+                        confidence=fast_result["confidence"],
+                        characteristics=None,
+                        volume_ml=500.0,  # Default
+                        weight_g=15.0,  # Default
+                        estimation_method="fast_default",
+                        color=fast_result["color"],
+                        waste_type_code="PENDING",  # Will be updated in background
+                        message=fast_result["message"],
+                        model_used=fast_result["model_used"],
+                        model_provider=fast_result["model_provider"],
+                        trace_id=request_trace_id,
+                        start_time=start_time,
+                        cost_usd=0.001,  # Roboflow cost
+                        input_format=input_format,
+                        agents_executed=["FastClassifier"],
+                    )
+                    
+                    # Schedule background validation
+                    validation_pipeline = get_validation_pipeline(pipeline)
+                    background_tasks.add_task(
+                        validation_pipeline.validate_and_sync,
+                        request=request_data,
+                        fast_result=fast_result,
+                        trace_id=request_trace_id,
+                    )
+                    
+                    result.meta.fast_mode = True
+                    result.meta.validation_status = "pending"
+                    
+                else:
+                    # Low confidence - use full pipeline
+                    logger.info(
+                        "fast_path_fallback_to_full",
+                        trace_id=request_trace_id,
+                        confidence=fast_result["confidence"],
+                        threshold=settings.FAST_PATH_CONFIDENCE_THRESHOLD,
+                    )
+                    result = await pipeline.process(request_data)
+                    
+            except Exception as e:
+                # If fast path fails, fallback to full pipeline
+                logger.warning(
+                    "fast_path_failed_fallback_to_full",
+                    trace_id=request_trace_id,
+                    error=str(e),
+                )
+                result = await pipeline.process(request_data)
+        else:
+            # FULL PATH: Traditional pipeline
+            result = await pipeline.process(request_data)
 
         # STEP 3: Add metadata
         result.meta.input_format = input_format

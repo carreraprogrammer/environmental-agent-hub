@@ -29,6 +29,7 @@ from app.schemas.classification import (
     VolumeField,
     VolumeSource,
 )
+from app.utils.image_preprocessor import ImagePreprocessor
 
 
 class MaterialClassifier:
@@ -100,9 +101,12 @@ class MaterialClassifier:
 
         start_time = datetime.now()
 
+        # Preprocess image to optimize API latency (resize + compress)
+        preprocessed_image = ImagePreprocessor.preprocess(image_data, trace_id=trace_id)
+
         # Call adapter with unified classification prompt
         result_dict = await self.adapter.classify_material(
-            image_data=image_data,
+            image_data=preprocessed_image,
             trace_id=trace_id,
         )
 
