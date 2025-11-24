@@ -1,10 +1,14 @@
 """
-AI Agent Module - Contains the single AI-powered agent.
+AI Agent Module - Contains AI-powered agents.
 
-This module contains MaterialClassifier, the only true AI agent in the system.
+This module contains:
+- MaterialClassifier: Single-model material classification agent
+- ConsensusClassificationAgent: Multi-model ensemble learning agent (V4)
+
 All other components are deterministic utilities in app/utils/classification/.
 """
 
+from app.agent.consensus_classifier import ConsensusClassificationAgent
 from app.agent.material_classifier import MaterialClassifier
 
-__all__ = ["MaterialClassifier"]
+__all__ = ["MaterialClassifier", "ConsensusClassificationAgent"]

@@ -39,10 +39,12 @@ import asyncio
 import time
 from typing import Any
 
+from app.agent.consensus_classifier import ConsensusClassificationAgent
 from app.agent.material_classifier import MaterialClassifier
 from app.utils.classification.color_mapper import ColorMapper
 from app.utils.classification.response_assembler import ResponseAssembler
 from app.utils.classification.waste_type_matcher import WasteTypeMatcher
+from app.core.config import settings
 from app.core.logging import logger
 from app.factories.classifier_factory import ClassifierFactory
 from app.schemas.classification import Material
@@ -383,14 +385,54 @@ class Pipeline:
         """Initialize Pipeline with 1 AI agent + 4 utilities + BackendIntegration."""
         logger.info("pipeline_initializing")
 
-        # Get classifier adapter from factory
-        self.classifier_adapter = ClassifierFactory.create()
-
         # Initialize metrics collector
         self.metrics = MetricsCollector()
 
-        # Initialize 1 AI agent + 4 utilities (PreValidator moved to client-side)
-        self.classifier = MaterialClassifier(adapter=self.classifier_adapter)
+        # Check if consensus mode is enabled
+        if settings.CLASSIFIER_MODEL.lower() == "consensus":
+            # CONSENSUS MODE: Multi-model ensemble learning
+            logger.info(
+                "pipeline_consensus_mode",
+                message="Initializing ConsensusClassificationAgent with 3 models",
+            )
+
+            # Create 3 adapters for consensus (configurable via environment variables)
+            primary_adapter = ClassifierFactory.create(settings.CONSENSUS_PRIMARY_MODEL)
+            secondary_adapter = ClassifierFactory.create(settings.CONSENSUS_SECONDARY_MODEL)
+            tiebreaker_adapter = ClassifierFactory.create(settings.CONSENSUS_TIEBREAKER_MODEL)
+
+            # Create consensus agent
+            self.classifier = ConsensusClassificationAgent(
+                primary_adapter=primary_adapter,
+                secondary_adapter=secondary_adapter,
+                tiebreaker_adapter=tiebreaker_adapter,
+            )
+
+            # Store adapter reference for logging (use primary)
+            self.classifier_adapter = primary_adapter
+            self.consensus_mode = True
+
+            logger.info(
+                "pipeline_consensus_initialized",
+                primary_model=primary_adapter.model_name,
+                secondary_model=secondary_adapter.model_name,
+                tiebreaker_model=tiebreaker_adapter.model_name,
+            )
+        else:
+            # SINGLE MODEL MODE: Standard MaterialClassifier
+            logger.info(
+                "pipeline_single_model_mode",
+                classifier_model=settings.CLASSIFIER_MODEL,
+            )
+
+            # Get classifier adapter from factory
+            self.classifier_adapter = ClassifierFactory.create()
+
+            # Initialize MaterialClassifier
+            self.classifier = MaterialClassifier(adapter=self.classifier_adapter)
+            self.consensus_mode = False
+
+        # Initialize 4 utilities (PreValidator moved to client-side)
         self.volume_estimator = VolumeEstimator()  # DEPRECATED - kept for compatibility
         self.color_mapper = ColorMapper()
         self.waste_type_matcher = WasteTypeMatcher()
@@ -403,6 +445,7 @@ class Pipeline:
         logger.info(
             "pipeline_initialized",
             classifier_adapter=type(self.classifier_adapter).__name__,
+            consensus_mode=self.consensus_mode,
             cost_per_request=self._calculate_total_cost(),
         )
 
@@ -518,12 +561,28 @@ class Pipeline:
     ) -> ClassifyResponse:
         """Execute the classification pipeline: 1 AI agent + 4 utilities."""
 
-        # STEP 1: MaterialClassifier - Classify material + confidence checkrialClassifier")
+        # STEP 1: MaterialClassifier - Classify material + confidence check
+        # Note: In consensus mode, this is ConsensusClassificationAgent
+        classifier_name = "ConsensusClassificationAgent" if self.consensus_mode else "MaterialClassifier"
+        logger.info("pipeline_step", trace_id=trace_id, step=1, agent=classifier_name)
+
         classification_result = await asyncio.wait_for(
             self.classifier.classify(image_data, trace_id),  # type: ignore
             timeout=self.AGENT_TIMEOUTS["classifier"],
         )
-        agents_executed.append("MaterialClassifier")
+        agents_executed.append(classifier_name)
+
+        # Log consensus metadata if available
+        if self.consensus_mode and "consensus_strategy" in classification_result.metadata:
+            logger.info(
+                "pipeline_consensus_result",
+                trace_id=trace_id,
+                consensus_strategy=classification_result.metadata.get("consensus_strategy"),
+                consensus_triggered=classification_result.metadata.get("consensus_triggered"),
+                models_consulted=classification_result.metadata.get("models_consulted"),
+                primary_confidence=classification_result.metadata.get("primary_confidence"),
+                primary_material=classification_result.metadata.get("primary_material"),
+            )
 
         # Confidence check (integrated in V4)
         material_confidence = classification_result.material.confidence

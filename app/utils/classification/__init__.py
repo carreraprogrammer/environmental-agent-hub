@@ -2,8 +2,8 @@
 Classification Utilities Module - Deterministic utilities for classification pipeline.
 
 ARCHITECTURE NOTE: These are NOT AI agents, they are deterministic utilities.
-- ColorMapper: Material ’ bin color lookup (NTC 24 standard)
-- WasteTypeMatcher: Material ’ waste_type_code matching
+- ColorMapper: Material -> bin color lookup (NTC 24 standard)
+- WasteTypeMatcher: Material -> waste_type_code matching
 - ResponseAssembler: JSON response construction
 - FeedbackGenerator: Template-based educational messages
 
