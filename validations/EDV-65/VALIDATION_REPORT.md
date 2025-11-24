@@ -1,4 +1,4 @@
-# EDV-64 Validation Report
+# edv-65 Validation Report
 **Multi-Model Consensus Agent - Backend Integration Testing**
 
 ---
@@ -19,7 +19,7 @@ All validation checks passed successfully. The multi-model consensus agent is fu
 ## Validation Results
 
 ### 🎯 Automated Validation Script
-**Script:** `validations/EDV-64/validation-edv64.sh`
+**Script:** `validations/edv-65/validation-edv64.sh`
 
 ```
 ✅ PASS: 8
@@ -165,7 +165,7 @@ BACKEND_STATION_ID: str | None = Field(
 ## Recommendations for Sprint Designer
 
 ### ✅ Ready to Close
-EDV-64 can be marked as **DONE** with the following achievements:
+edv-65 can be marked as **DONE** with the following achievements:
 
 1. **Multi-Model Consensus Agent**: Fully implemented and integrated
 2. **Backend Integration**: Fixed architecture mismatch in tests
@@ -192,10 +192,10 @@ Consider creating separate tickets for:
 
 ### Script Output
 ```bash
-$ ./validations/EDV-64/validation-edv64.sh
+$ ./validations/edv-65/validation-edv64.sh
 
 =======================================================
- EDV-64 VALIDATION - Multi-Model Consensus Agent
+ edv-65 VALIDATION - Multi-Model Consensus Agent
 =======================================================
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -219,13 +219,13 @@ $ ./validations/EDV-64/validation-edv64.sh
 ✅ PASS: Pipeline activa consensus cuando CLASSIFIER_MODEL=consensus
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ✅  RESUMEN EDV-64
+  ✅  RESUMEN edv-65
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PASS: 8
 FAIL: 0
 WARN: 0
 
-🎉 EDV-64 COMPLETADO: Todos los checks pasan.
+🎉 edv-65 COMPLETADO: Todos los checks pasan.
 ```
 
 ### Test Output
@@ -270,7 +270,7 @@ tests/integration/test_backend_integration.py::test_backend_health_check PASSED
 **Developer:** Daniel Carrera (@danielcarrera)  
 **Validation Date:** 2025-11-24  
 **Validation Status:** ✅ PASSED  
-**Recommendation:** CLOSE TICKET EDV-64
+**Recommendation:** CLOSE TICKET edv-65
 
 All acceptance criteria met. System is production-ready with consensus agent fully integrated and backend tests validated against live Rails backend.
 
@@ -278,7 +278,7 @@ All acceptance criteria met. System is production-ready with consensus agent ful
 
 **Next Steps:**
 1. Review this report
-2. Mark EDV-64 as DONE
+2. Mark edv-65 as DONE
 3. Merge to main branch
 4. Consider follow-up tickets listed above (optional)
 5. Update sprint board
