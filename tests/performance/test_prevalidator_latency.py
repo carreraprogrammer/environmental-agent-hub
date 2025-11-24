@@ -7,6 +7,13 @@ comfortably under 500ms p95 when Roboflow is responsive.
 
 from __future__ import annotations
 
+import pytest
+
+pytest.skip(
+    "PreValidator eliminado del pipeline backend; detección de waste vive en MaterialClassifier",
+    allow_module_level=True,
+)
+
 import asyncio
 import time
 from io import BytesIO
@@ -14,7 +21,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
 from PIL import Image
 
 # Ensure project root is on sys.path for imports

@@ -73,7 +73,7 @@ class PreValidator:
         overlap_threshold: float | None = None,
     ):
         """
-        Initialize PreValidator with Roboflow client.
+        Initialize PreValidator with Roboflow client (lazy loading).
 
         Args:
             model_id: Roboflow model ID (format: workspace/project/version)
@@ -94,23 +94,16 @@ class PreValidator:
         self.confidence_threshold = confidence_threshold or self.ROBOFLOW_CONFIDENCE_THRESHOLD
         self.overlap_threshold = overlap_threshold or self.ROBOFLOW_OVERLAP_THRESHOLD
 
-        # Initialize Roboflow client
-        try:
-            workspace, project, version = self.model_id.split("/")
-        except ValueError as exc:
-            raise ValueError(
-                f"Roboflow model_id must follow 'workspace/project/version' format, got: {self.model_id}"
-            ) from exc
-
-        client = Roboflow(api_key=settings.ROBOFLOW_API_KEY)
-        project_ref = client.workspace(workspace).project(project)
-        self.model = project_ref.version(version).model
+        # Lazy initialization: model will be loaded on first request
+        self.model = None
+        self._roboflow_client = Roboflow
 
         logger.info(
             "pre_validator_initialized",
             model_id=self.model_id,
             confidence_threshold=self.confidence_threshold,
             overlap_threshold=self.overlap_threshold,
+            lazy_loading=True,
         )
 
     async def validate(self, image_data: bytes, trace_id: str) -> ValidationResult:
@@ -315,6 +308,31 @@ class PreValidator:
         Returns:
             ValidationResult with detections metadata
         """
+        # Lazy load Roboflow model on first request
+        if self.model is None:
+            logger.info(
+                "pre_validator_loading_roboflow",
+                trace_id=trace_id,
+                model_id=self.model_id,
+            )
+            try:
+                workspace, project, version = self.model_id.split("/")
+                client = self._roboflow_client(api_key=settings.ROBOFLOW_API_KEY)
+                project_ref = client.workspace(workspace).project(project)
+                self.model = project_ref.version(version).model
+                logger.info(
+                    "pre_validator_roboflow_loaded",
+                    trace_id=trace_id,
+                    model_id=self.model_id,
+                )
+            except Exception as e:
+                logger.error(
+                    "pre_validator_roboflow_load_error",
+                    trace_id=trace_id,
+                    error=str(e),
+                )
+                raise
+
         # Encode image to base64 for Roboflow
         image_base64 = base64.b64encode(image_data).decode("utf-8")
 

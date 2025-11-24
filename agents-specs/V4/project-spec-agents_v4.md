@@ -1,5 +1,26 @@
 # Agent Hub – Project Requirements Spec V4.0 (Hybrid Edge + Backend Architecture)
 
+## 🔄 ACTUALIZACIÓN IMPORTANTE (Nov 2025)
+
+**PreValidator movido a cliente (EDV-58):**
+- ✅ **Validación de residuos ahora es client-side** - backend solo recibe imágenes válidas
+- ✅ **6 agentes backend** (era 7) - eliminado PreValidator del pipeline
+- ✅ **Costo: $0.010/request** (era $0.011) - 9% más barato
+- ✅ **Latencia: ~1000ms** (era ~1200ms) - 17% más rápido
+- ✅ **Serverless-ready** - sin cold start de Roboflow (37s)
+
+**Arquitectura actualizada:**
+```
+Cliente (validación local) → Agent Hub Backend (5 processing agents + Assembler) → Backend Rails API
+```
+
+**Documentos actualizados:**
+- `/validations/EDV-58/VALIDATION_REPORT.md`
+- `/validations/EDV-58/PREVALIDATOR_ANALYSIS.md`
+- `/validations/EDV-58/ROBOFLOW_ANALYSIS.md`
+
+---
+
 ## ⚠️ ARCHITECTURE CONTEXT (Agent Hub Scope)
 
 **Este documento especifica SOLO el sistema de orquestación de agentes V4.**
@@ -12,7 +33,7 @@ Cliente Edge (Roboflow local) → Agent Hub Backend (Python) → Backend Rails A
 **Alcance de este proyecto (Agent Hub Python V4):**
 - ✅ Recibe imagen como **bytes** (obligatorio en V4)
 - ✅ **Upload a S3 asíncrono** - No bloquea clasificación (background task)
-- ✅ Valida con **dos capas**: técnica + Roboflow Object Detection API ($0.001)
+- ✅ **Validación client-side** - Backend asume imágenes válidas (validación movida al cliente)
 - ✅ Clasifica con **MaterialClassifier unificado** en UNA llamada LLM
 - ✅ **NUEVO V4:** Per-field confidences (material, subtype, volume, condition, recyclability)
 - ✅ **NUEVO V4:** Partial success support (continúa con campos null si baja confidence)
@@ -21,8 +42,8 @@ Cliente Edge (Roboflow local) → Agent Hub Backend (Python) → Backend Rails A
 - ✅ Mapea material a color según NTC 2184 *(pendiente - ticket subsecuente)*
 - ✅ Genera feedback educativo *(pendiente - ticket subsecuente)*
 - ✅ Envía datos COMPLETOS al Backend Rails *(pendiente - ticket subsecuente)*
-- ✅ **70% más rápido** que V3 (3-5s → 0.8-1.2s)
-- ✅ **65% más barato** que V3 ($0.031 → $0.011)
+- ✅ **70% más rápido** que V3 (3-5s → ~1.0s)
+- ✅ **68% más barato** que V3 ($0.031 → $0.010)
 - ❌ NO gestiona usuarios ni autenticación
 - ❌ NO persiste datos (solo el backend lo hace)
 - ❌ NO genera dashboards
@@ -81,7 +102,7 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 ## 2) Alcance MVP V4.0 - Agent Hub (Implementado en EDV-51)
 
 ### **Features Core V4 (IMPLEMENTADO):**
-- ✅ **PreValidator V4**: Two-layer validation (technical + Roboflow Object Detection)
+- ✅ **Validación client-side**: Validación movida al cliente (simplifica backend)
 - ✅ **MaterialClassifier V4**: Unified classification en UNA llamada LLM
 - ✅ **Per-field confidences**: Cada campo retorna su propio confidence score
 - ✅ **Partial success**: Sistema continúa con campos null si confidence < threshold
@@ -126,7 +147,7 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 
 **US-V4-008:** Como **sistema**, quiero **partial success** para no perder datos si solo volumen tiene baja confidence (continúo con material + subtipo)
 
-**US-V4-009:** Como **admin**, quiero que PreValidator use **Roboflow Object Detection** ($0.001) en vez de GPT-4o-mini ($0.010) para reducir costos 90%
+**US-V4-009:** Como **admin**, quiero **validación client-side** para reducir latencia backend y simplificar arquitectura serverless
 
 ### **Perspectiva UX (Usuario Final):**
 
@@ -138,9 +159,9 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 
 ## 4) Requisitos Funcionales V4
 
-### 4.1 Validación de Imagen (PreValidator V4)
+### 4.1 Validación de Imagen (Client-Side en V4.1)
 
-**RF-V4-001**: El sistema DEBE validar imágenes con two-layer approach
+**RF-V4-001**: ~~El sistema DEBE validar imágenes con two-layer approach~~ **DEPRECATED - Movido a cliente (EDV-58)**
 - **Layer 1 - Technical Validations:**
   - Imagen no vacía (len > 0)
   - Formato válido (JPEG, PNG, WEBP)
@@ -316,17 +337,18 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 
 ### 5.1 Performance
 
-**RNF-V4-001**: Latencia total <1500ms (p95)
-- PreValidator: <500ms
-- MaterialClassifier: <1500ms
-- **Target V4**: 0.8-1.2s promedio
-- **Mejora vs V3**: 70% más rápido (3-5s → 1.2s)
+**RNF-V4-001**: Latencia total <1000ms (p95) - **ACTUALIZADO EDV-58**
+- MaterialClassifier: <1000ms (sin PreValidator)
+- **Target V4.1**: ~1000ms promedio
+- **Mejora vs V3**: 70% más rápido (3-5s → 1.0s)
+- **Mejora vs V4.0**: 17% más rápido (1.2s → 1.0s)
 
-**RNF-V4-002**: Costo <$0.015 per request
-- PreValidator: $0.001 (Roboflow API)
-- MaterialClassifier: $0.003-0.010 (según modelo)
-- **Target V4**: $0.011 promedio
-- **Mejora vs V3**: 65% más barato ($0.031 → $0.011)
+**RNF-V4-002**: Costo <$0.012 per request - **ACTUALIZADO EDV-58**
+- MaterialClassifier: $0.010 (único costo backend)
+- Validación: $0.000 (client-side, sin costo backend)
+- **Target V4.1**: $0.010 promedio
+- **Mejora vs V3**: 68% más barato ($0.031 → $0.010)
+- **Mejora vs V4.0**: 9% más barato ($0.011 → $0.010)
 
 **RNF-V4-003**: Throughput >= 10 requests/second
 - Con scaling horizontal (múltiples workers)
@@ -481,8 +503,8 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 
 | Métrica | V3 | V4 Target | V4 Actual | Mejora |
 |---------|----|-----------|-----------| -------|
-| Latency (p95) | 5000ms | 1500ms | 1200ms | 76% ↓ |
-| Cost per request | $0.031 | $0.015 | $0.011 | 65% ↓ |
+| Latency (p95) | 5000ms | 1000ms | 1000ms | 80% ↓ |
+| Cost per request | $0.031 | $0.012 | $0.010 | 68% ↓ |
 | Accuracy (Material) | 85% | 85% | 85% | = |
 | Accuracy (Subtype) | N/A | 80% | 82% | New |
 | Accuracy (Volume ±25%) | N/A | 70% | 73% | New |
@@ -520,8 +542,8 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 
 ## 8) Roadmap de Implementación
 
-### Sprint 3 (Actual) - EDV-51 ✅
-- [x] PreValidator V4 with Roboflow Object Detection
+### Sprint 3 - EDV-51 ✅ (Completado)
+- [x] ~~PreValidator V4 with Roboflow Object Detection~~ (deprecated - moved to client EDV-58)
 - [x] MaterialClassifier V4 unified
 - [x] OpenAI adapter expansion
 - [x] Anthropic adapter full implementation

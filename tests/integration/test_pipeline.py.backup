@@ -1,3 +1,4 @@
+"""
 """Integration tests for Pipeline Orchestrator V4.
 
 Tests the complete pipeline flow including all 6 agents:
@@ -297,19 +298,19 @@ class TestPipeline:
                 assert len(response.message) > 0
 
                 # Verify meta
-                assert response.meta.latency_ms >= 0  # Can be 0 with mocks
+                assert response.meta.latency_ms > 0
                 assert response.meta.cost_usd > 0
                 assert response.meta.input_format == "bytes"
-                assert len(response.meta.agents_executed) == 5  # 5 processing agents (Assembler not included in list)
+                assert len(response.meta.agents_executed) == 6
 
-                # Verify all 5 processing agents executed (PreValidator moved to client-side)
-                # Note: Assembler is not included in agents_executed list
+                # Verify all 6 agents executed (PreValidator moved to client-side)
                 expected_agents = [
                     "MaterialClassifier",
                     "VolumeEstimator",
                     "Mapper",
                     "WasteTypeMapper",
                     "FeedbackCoach",
+                    "Assembler",
                 ]
                 for agent in expected_agents:
                     assert agent in response.meta.agents_executed
@@ -394,44 +395,6 @@ class TestPipeline:
 
             assert exc_info.value.error_code == "LOW_CONFIDENCE"
             assert "confianza" in exc_info.value.message.lower()
-
-    @pytest.mark.asyncio
-    async def test_pipeline_no_waste_short_circuits(
-        self,
-        mock_request: ClassifyRequestForm,
-    ):
-        """Pipeline debe abortar si el clasificador devuelve NO_WASTE."""
-        pipeline = Pipeline()
-
-        from datetime import datetime
-
-        no_waste_result = MaterialClassificationResult(
-            material=MaterialField(material_type=Material.NO_WASTE, confidence=0.95),
-            subtype=SubtypeField(value=None, recycling_code=None, confidence=0.0),
-            condition=ConditionField(value=PhysicalCondition.CLEAN, confidence=0.0),
-            volume=VolumeField(liters=None, source=VolumeSource.ESTIMATED, confidence=0.0),
-            recyclability=RecyclabilityField(value=Recyclability.NON_RECYCLABLE, confidence=0.0),
-            reasoning="No waste detected in image",
-            timestamp=datetime.now(),
-            cost=0.010,
-            model_used="gpt-4o",
-            model_provider="openai",
-            partial_success=False,
-            metadata={},
-        )
-
-        with patch.object(
-            pipeline.classifier, "classify", new_callable=AsyncMock
-        ) as mock_classify:
-            mock_classify.return_value = no_waste_result
-
-            with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
-            ):
-                with pytest.raises(ValidationError) as excinfo:
-                    await pipeline.process(mock_request)
-
-        assert excinfo.value.error_code == "NO_WASTE_DETECTED"
 
     @pytest.mark.asyncio
     async def test_pipeline_medium_confidence_downgrades_to_other(
@@ -532,6 +495,7 @@ class TestPipeline:
     async def test_pipeline_with_all_materials(
         self,
         mock_request: ClassifyRequestForm,
+        mock_validation_result: ValidationResult,
     ):
         """Test pipeline with each material type."""
         from datetime import datetime
@@ -584,13 +548,13 @@ class TestPipeline:
                     assert response.material == material
                     assert response.confidence == 0.89
 
-                # Verify correct bin color
-                if material == Material.ORGANIC:
-                    assert response.color == BinColor.GREEN
-                elif material == Material.OTHER:
-                    assert response.color == BinColor.BLACK
-                else:
-                    assert response.color == BinColor.WHITE
+                    # Verify correct bin color
+                    if material == Material.ORGANIC:
+                        assert response.color == BinColor.GREEN
+                    elif material == Material.OTHER:
+                        assert response.color == BinColor.BLACK
+                        else:
+                            assert response.color == BinColor.WHITE
 
     @pytest.mark.asyncio
     async def test_pipeline_cost_calculation(self):

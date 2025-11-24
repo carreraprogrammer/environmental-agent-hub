@@ -11,6 +11,13 @@ Covers:
 
 from __future__ import annotations
 
+import pytest
+
+pytest.skip(
+    "PreValidator eliminado del pipeline backend; detección de waste vive en MaterialClassifier",
+    allow_module_level=True,
+)
+
 import asyncio
 from io import BytesIO
 from types import SimpleNamespace
@@ -18,7 +25,6 @@ from typing import Any
 from unittest.mock import patch
 
 from PIL import Image
-import pytest
 
 from app.agents.pre_validator import PreValidator
 from app.schemas.classification import ValidationReason, ValidationResult

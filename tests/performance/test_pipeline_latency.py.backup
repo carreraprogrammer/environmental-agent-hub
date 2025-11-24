@@ -162,85 +162,110 @@ class TestPipelineLatency:
     async def test_agent_latency_breakdown(
         self,
         mock_request: ClassifyRequestForm,
+        mock_validation_result: ValidationResult,
         mock_classification_result: MaterialClassificationResult,
     ):
         """Test individual agent latencies are within bounds."""
+        import asyncio
+
         pipeline = Pipeline()
 
         # Track agent timings
         timings: dict[str, float] = {}
 
-        # Mock MaterialClassifier with timing
+        # Mock each agent with timing
+        async def timed_validate(*args: Any, **kwargs: Any) -> ValidationResult:
+            start = time.time()
+            await asyncio.sleep(0.05)  # 50ms
+            timings["PreValidator"] = (time.time() - start) * 1000
+            return mock_validation_result
+
         async def timed_classify(*args: Any, **kwargs: Any) -> MaterialClassificationResult:
             start = time.time()
-            await asyncio.sleep(0.02)  # 20ms (fast mock)
+            await asyncio.sleep(0.1)  # 100ms
             timings["MaterialClassifier"] = (time.time() - start) * 1000
             return mock_classification_result
 
         with patch.object(
-            pipeline.classifier, "classify", new_callable=AsyncMock
-        ) as mock_classify:
-            mock_classify.side_effect = timed_classify
+            pipeline.pre_validator, "validate", new_callable=AsyncMock
+        ) as mock_validate:
+            mock_validate.side_effect = timed_validate
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
-            ):
-                await pipeline.process(mock_request)
+                pipeline.classifier, "classify", new_callable=AsyncMock
+            ) as mock_classify:
+                mock_classify.side_effect = timed_classify
 
-                # Verify MaterialClassifier latency (primary AI agent)
-                # Note: This is mocked fast time
-                assert (
-                    timings["MaterialClassifier"] < 500
-                ), f"MaterialClassifier {timings['MaterialClassifier']}ms exceeds 500ms"
+                with patch.object(
+                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                ):
+                    await pipeline.process(mock_request)
 
-                # Print timing breakdown
-                print("\n=== Agent Latency Breakdown (Mocked) ===")
-                for agent, latency in timings.items():
-                    print(f"{agent}: {latency:.2f}ms")
+                    # Verify agent latencies
+                    # Note: These are mocked fast times
+                    assert (
+                        timings["PreValidator"] < 500
+                    ), f"PreValidator {timings['PreValidator']}ms exceeds 500ms"
+                    assert (
+                        timings["MaterialClassifier"] < 600
+                    ), f"MaterialClassifier {timings['MaterialClassifier']}ms exceeds 600ms"
+
+                    # Print timing breakdown
+                    print("\n=== Agent Latency Breakdown (Mocked) ===")
+                    for agent, latency in timings.items():
+                        print(f"{agent}: {latency:.2f}ms")
 
     @pytest.mark.asyncio
     async def test_agents_executed_count(
         self,
         mock_request: ClassifyRequestForm,
+        mock_validation_result: ValidationResult,
         mock_classification_result: MaterialClassificationResult,
     ):
-        """Test that all 5 processing agents are executed."""
+        """Test that all 7 agents are executed."""
         pipeline = Pipeline()
 
         with patch.object(
-            pipeline.classifier, "classify", new_callable=AsyncMock
-        ) as mock_classify:
-            mock_classify.return_value = mock_classification_result
+            pipeline.pre_validator, "validate", new_callable=AsyncMock
+        ) as mock_validate:
+            mock_validate.return_value = mock_validation_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
-            ):
-                response = await pipeline.process(mock_request)
+                pipeline.classifier, "classify", new_callable=AsyncMock
+            ) as mock_classify:
+                mock_classify.return_value = mock_classification_result
 
-                # V4 should execute exactly 5 processing agents
-                # (Assembler not included in agents_executed list)
-                assert (
-                    len(response.meta.agents_executed) == 5
-                ), f"Expected 5 agents, got {len(response.meta.agents_executed)}"
+                with patch.object(
+                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                ):
+                    response = await pipeline.process(mock_request)
 
-                # Verify specific agents (PreValidator moved to client-side)
-                expected_agents = [
-                    "MaterialClassifier",
-                    "VolumeEstimator",
-                    "Mapper",
-                    "WasteTypeMapper",
-                    "FeedbackCoach",
-                ]
-
-                for agent in expected_agents:
+                    # V4 should execute exactly 7 agents
                     assert (
-                        agent in response.meta.agents_executed
-                    ), f"Agent {agent} not executed"
+                        len(response.meta.agents_executed) == 7
+                    ), f"Expected 7 agents, got {len(response.meta.agents_executed)}"
+
+                    # Verify specific agents
+                    expected_agents = [
+                        "PreValidator",
+                        "MaterialClassifier",
+                        "VolumeEstimator",
+                        "Mapper",
+                        "WasteTypeMapper",
+                        "FeedbackCoach",
+                        "Assembler",
+                    ]
+
+                    for agent in expected_agents:
+                        assert (
+                            agent in response.meta.agents_executed
+                        ), f"Agent {agent} not executed"
 
     @pytest.mark.asyncio
     async def test_memory_usage(
         self,
         mock_request: ClassifyRequestForm,
+        mock_validation_result: ValidationResult,
         mock_classification_result: MaterialClassificationResult,
     ):
         """Test pipeline memory usage is reasonable."""
@@ -256,74 +281,92 @@ class TestPipelineLatency:
 
         # Process a request
         with patch.object(
-            pipeline.classifier, "classify", new_callable=AsyncMock
-        ) as mock_classify:
-            mock_classify.return_value = mock_classification_result
+            pipeline.pre_validator, "validate", new_callable=AsyncMock
+        ) as mock_validate:
+            mock_validate.return_value = mock_validation_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
-            ):
-                response = await pipeline.process(mock_request)
+                pipeline.classifier, "classify", new_callable=AsyncMock
+            ) as mock_classify:
+                mock_classify.return_value = mock_classification_result
 
-                # Response size should be reasonable (< 50KB)
-                response_size = sys.getsizeof(response)
-                assert (
-                    response_size < 50_000
-                ), f"Response too large: {response_size} bytes"
+                with patch.object(
+                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                ):
+                    response = await pipeline.process(mock_request)
+
+                    # Response size should be reasonable (< 50KB)
+                    response_size = sys.getsizeof(response)
+                    assert (
+                        response_size < 50_000
+                    ), f"Response too large: {response_size} bytes"
 
     @pytest.mark.asyncio
     async def test_concurrent_requests(
         self,
         mock_request: ClassifyRequestForm,
+        mock_validation_result: ValidationResult,
         mock_classification_result: MaterialClassificationResult,
     ):
         """Test pipeline handles concurrent requests efficiently."""
+        import asyncio
+
         pipeline = Pipeline()
+
+        async def fast_validate(*args: Any, **kwargs: Any) -> ValidationResult:
+            await asyncio.sleep(0.01)
+            return mock_validation_result
 
         async def fast_classify(*args: Any, **kwargs: Any) -> MaterialClassificationResult:
             await asyncio.sleep(0.02)
             return mock_classification_result
 
-        # Patch at the class level, outside the loop
-        with patch.object(
-            pipeline.classifier, "classify", new_callable=AsyncMock
-        ) as mock_classify:
-            mock_classify.side_effect = fast_classify
+        # Process 5 concurrent requests
+        tasks = []
+        start = time.time()
+
+        for i in range(5):
+            # Create unique request for each
+            request = ClassifyRequestForm(
+                scan_id=uuid4(),
+                station_id=f"PERF-{i}",
+                image_bytes=b"test_image",
+                tenant_id="perf-tenant",
+                trace_id=uuid4(),
+                idempotency_key=uuid4(),
+            )
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
-            ):
-                # Process 5 concurrent requests
-                tasks = []
-                start = time.time()
+                pipeline.pre_validator, "validate", new_callable=AsyncMock
+            ) as mock_validate:
+                mock_validate.side_effect = fast_validate
 
-                for i in range(5):
-                    # Create unique request for each
-                    request = ClassifyRequestForm(
-                        scan_id=uuid4(),
-                        station_id=f"PERF-{i}",
-                        image_bytes=b"test_image",
-                        tenant_id="perf-tenant",
-                        trace_id=uuid4(),
-                        idempotency_key=uuid4(),
-                    )
-                    task = asyncio.create_task(pipeline.process(request))
-                    tasks.append(task)
+                with patch.object(
+                    pipeline.classifier, "classify", new_callable=AsyncMock
+                ) as mock_classify:
+                    mock_classify.side_effect = fast_classify
 
-                # Wait for all to complete
-                responses = await asyncio.gather(*tasks)
-                elapsed_ms = (time.time() - start) * 1000
+                    with patch.object(
+                        pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                    ):
+                        task = asyncio.create_task(pipeline.process(request))
+                        tasks.append(task)
 
-                # All should complete
-                assert len(responses) == 5
+        # Wait for all to complete
+        responses = await asyncio.gather(*tasks)
+        elapsed_ms = (time.time() - start) * 1000
 
-                # Total time should be less than 5x sequential (shows concurrency benefit)
-                # With mocking, this should be very fast
-                assert elapsed_ms < 500, f"Concurrent processing too slow: {elapsed_ms}ms"
+        # All should complete
+        assert len(responses) == 5
+
+        # Total time should be less than 5x sequential (shows concurrency benefit)
+        # With mocking, this should be very fast
+        assert elapsed_ms < 500, f"Concurrent processing too slow: {elapsed_ms}ms"
 
     @pytest.mark.asyncio
     async def test_input_format_detection_performance(
         self,
+        mock_validation_result: ValidationResult,
         mock_classification_result: MaterialClassificationResult,
     ):
         """Test input format detection doesn't add significant overhead."""
@@ -340,31 +383,37 @@ class TestPipelineLatency:
         )
 
         with patch.object(
-            pipeline.classifier, "classify", new_callable=AsyncMock
-        ) as mock_classify:
-            mock_classify.return_value = mock_classification_result
+            pipeline.pre_validator, "validate", new_callable=AsyncMock
+        ) as mock_validate:
+            mock_validate.return_value = mock_validation_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
-            ):
-                start = time.time()
-                response = await pipeline.process(request_bytes)
-                elapsed_ms = (time.time() - start) * 1000
+                pipeline.classifier, "classify", new_callable=AsyncMock
+            ) as mock_classify:
+                mock_classify.return_value = mock_classification_result
 
-                # Should be very fast (< 1000ms target)
-                assert elapsed_ms < 1000
+                with patch.object(
+                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                ):
+                    start = time.time()
+                    response = await pipeline.process(request_bytes)
+                    elapsed_ms = (time.time() - start) * 1000
 
-                # Should detect bytes format
-                assert response.meta.input_format == "bytes"
+                    # Should be very fast
+                    assert elapsed_ms < 1500
+
+                    # Should detect bytes format
+                    assert response.meta.input_format == "bytes"
 
 
 class TestPipelineStressTest:
     """Stress tests for pipeline under load."""
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Slow stress test - run manually")
+    @pytest.mark.slow
     async def test_rapid_sequential_requests(
         self,
+        mock_validation_result: ValidationResult,
         mock_classification_result: MaterialClassificationResult,
     ):
         """Test pipeline handles rapid sequential requests."""
@@ -383,18 +432,23 @@ class TestPipelineStressTest:
             )
 
             with patch.object(
-                pipeline.classifier, "classify", new_callable=AsyncMock
-            ) as mock_classify:
-                mock_classify.return_value = mock_classification_result
+                pipeline.pre_validator, "validate", new_callable=AsyncMock
+            ) as mock_validate:
+                mock_validate.return_value = mock_validation_result
 
                 with patch.object(
-                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
-                ):
-                    try:
-                        await pipeline.process(request)
-                        successes += 1
-                    except Exception as e:
-                        print(f"Request {i} failed: {e}")
+                    pipeline.classifier, "classify", new_callable=AsyncMock
+                ) as mock_classify:
+                    mock_classify.return_value = mock_classification_result
+
+                    with patch.object(
+                        pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                    ):
+                        try:
+                            await pipeline.process(request)
+                            successes += 1
+                        except Exception as e:
+                            print(f"Request {i} failed: {e}")
 
         # At least 95% should succeed
         assert successes >= 19, f"Only {successes}/20 requests succeeded"

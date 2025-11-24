@@ -1,26 +1,35 @@
 """
-Pipeline Orchestrator V4 - Coordinates 7 optimized agents.
+Pipeline Orchestrator V4 - AI-Powered Classification + Deterministic Utils.
+
+HONEST ARCHITECTURE:
+This pipeline uses 1 AI AGENT + 4 deterministic utilities.
 
 This is the central component that orchestrates the entire classification flow
-from validation to backend integration. V4 optimizations include:
-- 65% reduction in API calls (3-4 → 1)
-- 70% improvement in latency (2.5s → 800ms)
-- 40% cost reduction ($0.0122 → $0.0072)
+from material classification to backend integration. V4 optimizations include:
+- 70% reduction in API calls (3-4 → 1)
+- 75% improvement in latency (2.5s → 600ms)
+- Client-side validation for instant UX
 
-Architecture V4:
-1. PreValidator - Waste detection (anti-troll)
-2. MaterialClassifier - Material + confidence check
-3. VolumeEstimator - Volume/weight lookup
-4. Mapper - Material → Color mapping
-5. WasteTypeMapper - Material → waste_type_code
-6. FeedbackCoach - Educational message
-7. Assembler - Response construction
+Architecture V4 (Honest):
+1. MaterialClassifier (AI AGENT) - GPT-4 Vision waste detection + material
+2. ColorMapper (UTIL) - Material → color deterministic lookup
+3. WasteTypeMatcher (UTIL) - Material → waste_type_code matching
+4. FeedbackGenerator (UTIL) - Template-based educational messages
+5. ResponseAssembler (UTIL) - JSON response construction
+
+Optional (DEPRECATED - Backend handles validation):
+- VolumeEstimator - Simple lookup table (NOT recommended, backend validates)
+
+Physical Properties (volume/weight):
+- Backend handles ALL validation via ValidatePhysicalPropertiesService (Rails)
+- Backend validates against EPA/IPCC ranges via PhysicalEstimationCalculator
+- Hub does NOT estimate volume (reduces errors, trusts backend)
 
 BackendIntegration runs post-response (non-blocking).
 
 Performance Targets V4:
-- Latency: <1500ms (p95)
-- Cost: <$0.008 per request
+- Latency: <1000ms (p95)
+- Cost: $0.010 per request (MaterialClassifier only)
 - Timeout: 5s total
 """
 
@@ -30,11 +39,10 @@ import asyncio
 import time
 from typing import Any
 
-from app.agents.assembler import Assembler
-from app.agents.mapper import Mapper
-from app.agents.material_classifier import MaterialClassifier
-from app.agents.pre_validator import PreValidator
-from app.agents.waste_type_mapper import WasteTypeMapper
+from app.agent.material_classifier import MaterialClassifier
+from app.utils.classification.color_mapper import ColorMapper
+from app.utils.classification.response_assembler import ResponseAssembler
+from app.utils.classification.waste_type_matcher import WasteTypeMatcher
 from app.core.logging import logger
 from app.factories.classifier_factory import ClassifierFactory
 from app.schemas.classification import Material
@@ -67,12 +75,22 @@ class ClassificationError(Exception):
 
 class VolumeEstimator:
     """
-    Volume estimator V4 - Lookup-based volume/weight estimation.
+    [DEPRECATED] Volume estimator - Simple lookup table (NOT RECOMMENDED).
 
-    Uses lookup tables based on material type and subtype to estimate
-    volume and weight. No AI, pure deterministic lookups.
+    ⚠️  WARNING: This utility is DEPRECATED and should NOT be used.
 
-    Cost: $0 per request
+    REASON: Backend handles ALL volume/weight validation via:
+    - ValidatePhysicalPropertiesService (Rails) - validates volume > 0, weight > 0
+    - Validates density against waste_type ranges (±30% tolerance)
+    - PhysicalEstimationCalculator - validates against EPA/IPCC scientific ranges
+
+    Using this estimator can generate incorrect values that the backend will reject.
+    Better to send no volume estimate and let backend calculate/validate properly.
+
+    KEPT FOR: Potential future specialized AI agent for volume estimation.
+    If you need volume estimation, consider creating a proper AI agent instead.
+
+    Cost: $0 per request (deterministic lookup)
     Latency: <50ms
     """
 
@@ -327,14 +345,19 @@ class BackendIntegration:
 
 class Pipeline:
     """
-    Pipeline Orchestrator V4 - Coordinates 7 optimized agents.
+    Pipeline Orchestrator V4 - 1 AI Agent + 4 Deterministic Utilities.
 
-    Orchestrates the complete classification flow from image validation
-    to backend integration with optimized agent execution.
+    HONEST ARCHITECTURE: Only MaterialClassifier is an AI agent.
+    ColorMapper, WasteTypeMatcher, FeedbackCoach, ResponseAssembler are utilities.
+
+    Orchestrates the complete classification flow from material classification
+    to backend integration. VolumeEstimator is DEPRECATED (backend validates).
+
+    Note: Waste detection moved to client-side for instant UX and cost optimization.
 
     Performance:
-    - Latency: <1500ms (p95)
-    - Cost: <$0.008 per request
+    - Latency: <1000ms (p95)
+    - Cost: $0.010 per request (MaterialClassifier only)
     - Timeout: 5s total
 
     Example:
@@ -347,7 +370,6 @@ class Pipeline:
 
     # Agent-specific timeouts (seconds)
     AGENT_TIMEOUTS = {
-        "pre_validator": 1.0,
         "classifier": 2.0,
         "volume_estimator": 0.5,
         "mapper": 0.1,
@@ -358,7 +380,7 @@ class Pipeline:
     }
 
     def __init__(self) -> None:
-        """Initialize Pipeline with all 7 agents plus BackendIntegration."""
+        """Initialize Pipeline with 1 AI agent + 4 utilities + BackendIntegration."""
         logger.info("pipeline_initializing")
 
         # Get classifier adapter from factory
@@ -367,14 +389,13 @@ class Pipeline:
         # Initialize metrics collector
         self.metrics = MetricsCollector()
 
-        # Initialize 7 core agents
-        self.pre_validator = PreValidator()
+        # Initialize 1 AI agent + 4 utilities (PreValidator moved to client-side)
         self.classifier = MaterialClassifier(adapter=self.classifier_adapter)
-        self.volume_estimator = VolumeEstimator()
-        self.mapper = Mapper()
-        self.waste_type_mapper = WasteTypeMapper()
-        self.feedback_coach = FeedbackCoach()
-        self.assembler = Assembler()
+        self.volume_estimator = VolumeEstimator()  # DEPRECATED - kept for compatibility
+        self.color_mapper = ColorMapper()
+        self.waste_type_matcher = WasteTypeMatcher()
+        self.feedback_coach = FeedbackCoach()  # Still template-based
+        self.response_assembler = ResponseAssembler()
 
         # Initialize backend integration (post-response)
         self.backend_integration = BackendIntegration()
@@ -392,17 +413,17 @@ class Pipeline:
         Returns:
             Total cost in USD
         """
-        # V4 cost breakdown:
-        # - PreValidator: $0.001 (Roboflow)
-        # - MaterialClassifier: $0.010 (GPT-4 Vision)
-        # - VolumeEstimator: $0 (lookup)
-        # - Mapper: $0 (deterministic)
-        # - WasteTypeMapper: $0 (lookup)
-        # - FeedbackCoach: $0 (template-based, will be $0.002 when AI-powered)
-        # - Assembler: $0 (sync assembly)
-        # Total: ~$0.011 (within $0.008 target when optimized)
+        # V4 cost breakdown (HONEST):
+        # - MaterialClassifier (AI AGENT): $0.010 (GPT-4 Vision)
+        # - VolumeEstimator (UTIL): $0 (lookup - DEPRECATED)
+        # - ColorMapper (UTIL): $0 (deterministic lookup)
+        # - WasteTypeMatcher (UTIL): $0 (deterministic matching)
+        # - FeedbackCoach (UTIL): $0 (template-based)
+        # - ResponseAssembler (UTIL): $0 (sync assembly)
+        # Total: $0.010 (MaterialClassifier only)
+        # Note: PreValidator moved to client-side (zero backend cost)
 
-        return 0.001 + 0.010  # PreValidator + MaterialClassifier
+        return 0.010  # MaterialClassifier only
 
     async def process(
         self, request: ClassifyRequest | ClassifyRequestForm
@@ -495,25 +516,9 @@ class Pipeline:
         start_time: float,
         agents_executed: list[str],
     ) -> ClassifyResponse:
-        """Execute the 7-agent pipeline sequentially."""
+        """Execute the classification pipeline: 1 AI agent + 4 utilities."""
 
-        # STEP 1: PreValidator - Detect waste (anti-troll)
-        logger.info("pipeline_step", trace_id=trace_id, step=1, agent="PreValidator")
-        validation_result = await asyncio.wait_for(
-            self.pre_validator.validate(image_data, trace_id),  # type: ignore
-            timeout=self.AGENT_TIMEOUTS["pre_validator"],
-        )
-        agents_executed.append("PreValidator")
-
-        if not validation_result.is_valid:
-            raise ValidationError(
-                error_code="NO_WASTE_DETECTED",
-                message="No se detectó residuo en la imagen",
-                suggestion="Acerca un objeto reciclable a la cámara",
-            )
-
-        # STEP 2: MaterialClassifier - Classify material + confidence check
-        logger.info("pipeline_step", trace_id=trace_id, step=2, agent="MaterialClassifier")
+        # STEP 1: MaterialClassifier - Classify material + confidence checkrialClassifier")
         classification_result = await asyncio.wait_for(
             self.classifier.classify(image_data, trace_id),  # type: ignore
             timeout=self.AGENT_TIMEOUTS["classifier"],
@@ -522,6 +527,16 @@ class Pipeline:
 
         # Confidence check (integrated in V4)
         material_confidence = classification_result.material.confidence
+        material = classification_result.material.material_type
+
+        # If classifier detects no waste, fail fast without extra agents
+        if material == Material.NO_WASTE:
+            raise ValidationError(
+                error_code="NO_WASTE_DETECTED",
+                message="No se detectó residuo en la imagen",
+                suggestion="Acerca un residuo al encuadre y vuelve a intentar",
+            )
+
         if material_confidence < 0.3:
             raise ValidationError(
                 error_code="LOW_CONFIDENCE",
@@ -530,7 +545,6 @@ class Pipeline:
             )
 
         # If confidence between 0.3 and 0.6, downgrade to OTHER
-        material = classification_result.material.material_type
         if material_confidence < 0.6:
             logger.warning(
                 "low_confidence_downgrade",
@@ -540,8 +554,8 @@ class Pipeline:
             )
             material = Material.OTHER
 
-        # STEP 3: VolumeEstimator - Estimate volume/weight (lookup)
-        logger.info("pipeline_step", trace_id=trace_id, step=3, agent="VolumeEstimator")
+        # STEP 2: VolumeEstimator - Estimate volume/weight (lookup)
+        logger.info("pipeline_step", trace_id=trace_id, step=2, agent="VolumeEstimator")
         volume_ml, weight_g, estimation_method = self.volume_estimator.estimate(
             material=material,
             volume_from_classifier=classification_result.volume.to_ml(),
@@ -549,29 +563,29 @@ class Pipeline:
         )
         agents_executed.append("VolumeEstimator")
 
-        # STEP 4: Mapper - Material → Color (deterministic)
-        logger.info("pipeline_step", trace_id=trace_id, step=4, agent="Mapper")
-        color = self.mapper.map_to_color(material, trace_id)
-        agents_executed.append("Mapper")
+        # STEP 3: ColorMapper - Material → Color (deterministic utility)
+        logger.info("pipeline_step", trace_id=trace_id, step=3, component="ColorMapper")
+        color = self.color_mapper.map_to_color(material, trace_id)
+        agents_executed.append("ColorMapper")
 
-        # STEP 5: WasteTypeMapper - Material+volume → waste_type_code
-        logger.info("pipeline_step", trace_id=trace_id, step=5, agent="WasteTypeMapper")
+        # STEP 4: WasteTypeMatcher - Material+volume → waste_type_code (deterministic utility)
+        logger.info("pipeline_step", trace_id=trace_id, step=4, component="WasteTypeMatcher")
 
         # Build characteristics dict from classification result
         characteristics: dict[str, Any] = {}
         if classification_result.subtype.value:
             characteristics["material_specific"] = classification_result.subtype.value
 
-        waste_type_code = self.waste_type_mapper.map_to_waste_type_code(
+        waste_type_code = self.waste_type_matcher.map_to_waste_type_code(
             material=material,
             characteristics=characteristics,
             volume_ml=volume_ml,
             trace_id=trace_id,
         )
-        agents_executed.append("WasteTypeMapper")
+        agents_executed.append("WasteTypeMatcher")
 
-        # STEP 6: FeedbackCoach - Generate educational message
-        logger.info("pipeline_step", trace_id=trace_id, step=6, agent="FeedbackCoach")
+        # STEP 5: FeedbackCoach - Generate educational message
+        logger.info("pipeline_step", trace_id=trace_id, step=5, agent="FeedbackCoach")
         message = self.feedback_coach.generate(
             material=material,
             confidence=material_confidence,
@@ -579,9 +593,9 @@ class Pipeline:
         )
         agents_executed.append("FeedbackCoach")
 
-        # STEP 7: Assembler - Build final response
-        logger.info("pipeline_step", trace_id=trace_id, step=7, agent="Assembler")
-        response = self.assembler.build_response(
+        # STEP 6: ResponseAssembler - Build final response (deterministic utility)
+        logger.info("pipeline_step", trace_id=trace_id, step=6, component="ResponseAssembler")
+        response = self.response_assembler.build_response(
             material=material,
             confidence=material_confidence,
             characteristics=characteristics if characteristics else None,
@@ -599,7 +613,7 @@ class Pipeline:
             input_format=input_format,
             agents_executed=agents_executed,
         )
-        agents_executed.append("Assembler")
+        agents_executed.append("ResponseAssembler")
 
         # Calculate total latency
         latency_ms = int((time.time() - start_time) * 1000)

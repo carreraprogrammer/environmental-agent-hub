@@ -18,12 +18,18 @@ in-memory images (256x256 JPEG) so they still run deterministically.
 
 from __future__ import annotations
 
+import pytest
+
+pytest.skip(
+    "PreValidator eliminado del pipeline backend; detección de waste vive en MaterialClassifier",
+    allow_module_level=True,
+)
+
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
 from PIL import Image
 
 # Ensure project root is on sys.path for imports
