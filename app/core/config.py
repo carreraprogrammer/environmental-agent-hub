@@ -98,11 +98,23 @@ class Settings(BaseSettings):
     # Anthropic Configuration (Optional)
     ANTHROPIC_API_KEY: str | None = Field(default=None)
 
-    # AWS S3 Configuration (Optional)
-    AWS_ACCESS_KEY_ID: str | None = Field(default=None)
-    AWS_SECRET_ACCESS_KEY: str | None = Field(default=None)
-    AWS_REGION: str = Field(default="us-east-1")
-    S3_BUCKET: str = Field(default="agent-hub-images")
+    # AWS S3 Configuration (Optional - for background image uploads)
+    AWS_ACCESS_KEY_ID: str | None = Field(
+        default=None,
+        description="AWS access key ID for S3 uploads",
+    )
+    AWS_SECRET_ACCESS_KEY: str | None = Field(
+        default=None,
+        description="AWS secret access key for S3 uploads",
+    )
+    AWS_REGION: str = Field(
+        default="us-east-1",
+        description="AWS region for S3 bucket",
+    )
+    S3_BUCKET: str = Field(
+        default="agent-hub-images",
+        description="S3 bucket name for image storage",
+    )
 
     # Backend Rails API Configuration
     BACKEND_API_URL: str = Field(default="http://localhost:3000/api/v1")
