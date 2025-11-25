@@ -30,6 +30,7 @@ def s3_service():
         mock_settings.AWS_ACCESS_KEY_ID = "test-key-id"
         mock_settings.AWS_SECRET_ACCESS_KEY = "test-secret-key"
         mock_settings.AWS_REGION = "us-east-1"
+        mock_settings.AWS_ENDPOINT_URL = None  # No custom endpoint by default
 
         with patch("app.services.s3_service.boto3.client"):
             service = S3Service(bucket_name="test-bucket")
@@ -52,6 +53,7 @@ class TestS3ServiceInitialization:
             mock_settings.AWS_ACCESS_KEY_ID = "key-id"
             mock_settings.AWS_SECRET_ACCESS_KEY = "secret-key"
             mock_settings.AWS_REGION = "us-west-2"
+            mock_settings.AWS_ENDPOINT_URL = None
 
             with patch("app.services.s3_service.boto3.client") as mock_boto:
                 service = S3Service()
@@ -61,12 +63,12 @@ class TestS3ServiceInitialization:
                 assert service.base_delay == 1
 
                 # Verify boto3 client was created with correct credentials
-                mock_boto.assert_called_once_with(
-                    "s3",
-                    aws_access_key_id="key-id",
-                    aws_secret_access_key="secret-key",
-                    region_name="us-west-2",
-                )
+                mock_boto.assert_called_once()
+                call_kwargs = mock_boto.call_args.kwargs
+                assert call_kwargs["service_name"] == "s3"
+                assert call_kwargs["aws_access_key_id"] == "key-id"
+                assert call_kwargs["aws_secret_access_key"] == "secret-key"
+                assert call_kwargs["region_name"] == "us-west-2"
 
     def test_init_with_custom_bucket(self):
         """Test initialization with custom bucket name."""
@@ -74,6 +76,7 @@ class TestS3ServiceInitialization:
             mock_settings.AWS_ACCESS_KEY_ID = "key-id"
             mock_settings.AWS_SECRET_ACCESS_KEY = "secret-key"
             mock_settings.AWS_REGION = "us-east-1"
+            mock_settings.AWS_ENDPOINT_URL = None
 
             with patch("app.services.s3_service.boto3.client"):
                 service = S3Service(bucket_name="custom-bucket", max_retries=5, base_delay=2)
@@ -89,11 +92,47 @@ class TestS3ServiceInitialization:
             mock_settings.AWS_ACCESS_KEY_ID = "key-id"
             mock_settings.AWS_SECRET_ACCESS_KEY = "secret-key"
             mock_settings.AWS_REGION = "us-east-1"
+            mock_settings.AWS_ENDPOINT_URL = None
 
             with patch("app.services.s3_service.boto3.client"):
                 # Should not raise
                 service = S3Service()
                 assert service is not None
+
+    def test_init_with_custom_endpoint(self):
+        """Test initialization with custom endpoint URL (MinIO, R2, etc.)."""
+        with patch("app.services.s3_service.settings") as mock_settings:
+            mock_settings.S3_BUCKET = "test-bucket"
+            mock_settings.AWS_ACCESS_KEY_ID = "minioadmin"
+            mock_settings.AWS_SECRET_ACCESS_KEY = "minioadmin123"
+            mock_settings.AWS_REGION = "us-east-1"
+            mock_settings.AWS_ENDPOINT_URL = "http://localhost:9000"
+
+            with patch("app.services.s3_service.boto3.client") as mock_boto:
+                S3Service()
+
+                # Verify boto3 client was called with endpoint_url
+                mock_boto.assert_called_once()
+                call_kwargs = mock_boto.call_args.kwargs
+                assert call_kwargs["endpoint_url"] == "http://localhost:9000"
+                assert call_kwargs["aws_access_key_id"] == "minioadmin"
+
+    def test_init_without_custom_endpoint(self):
+        """Test initialization without custom endpoint (AWS S3 default)."""
+        with patch("app.services.s3_service.settings") as mock_settings:
+            mock_settings.S3_BUCKET = "test-bucket"
+            mock_settings.AWS_ACCESS_KEY_ID = "aws-key"
+            mock_settings.AWS_SECRET_ACCESS_KEY = "aws-secret"
+            mock_settings.AWS_REGION = "us-east-1"
+            mock_settings.AWS_ENDPOINT_URL = None
+
+            with patch("app.services.s3_service.boto3.client") as mock_boto:
+                S3Service()
+
+                # Verify boto3 client was called WITHOUT endpoint_url
+                mock_boto.assert_called_once()
+                call_kwargs = mock_boto.call_args.kwargs
+                assert "endpoint_url" not in call_kwargs
 
 
 class TestGenerateS3Key:

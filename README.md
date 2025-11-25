@@ -920,6 +920,237 @@ pytest tests/unit/test_logging.py::TestJSONOutput -v
 pytest tests/unit/test_logging.py::TestTraceIdPropagation -v
 ```
 
+## 📦 Image Storage Configuration
+
+Agent Hub supports **asynchronous background image uploads** to S3-compatible storage services. Images are uploaded after classification response is returned (non-blocking).
+
+### Supported Storage Services
+
+- **MinIO** (local development) ⭐ Recommended for development
+- **Cloudflare R2** (production) ⭐⭐⭐ Recommended for production
+- **AWS S3** (original)
+- **DigitalOcean Spaces**
+- Any S3-compatible storage
+
+### Local Development with MinIO
+
+**Why MinIO?**
+- ✅ 100% S3 API compatible (uses same boto3 code)
+- ✅ Runs locally with Docker (no account needed)
+- ✅ Free and open source
+- ✅ Perfect for development and testing
+
+**Setup (5 minutes):**
+
+```bash
+# 1. Start MinIO with Docker
+docker run -d \
+  -p 9000:9000 \
+  -p 9001:9001 \
+  --name minio \
+  -e "MINIO_ROOT_USER=minioadmin" \
+  -e "MINIO_ROOT_PASSWORD=minioadmin123" \
+  minio/minio server /data --console-address ":9001"
+
+# 2. Open MinIO Console
+# http://localhost:9001
+# Login: minioadmin / minioadmin123
+
+# 3. Create bucket
+# In console: Buckets → Create Bucket → "agent-hub-images-dev"
+
+# 4. Configure .env
+cat > .env << EOF
+AWS_ACCESS_KEY_ID=minioadmin
+AWS_SECRET_ACCESS_KEY=minioadmin123
+AWS_REGION=us-east-1
+S3_BUCKET=agent-hub-images-dev
+AWS_ENDPOINT_URL=http://localhost:9000
+EOF
+
+# 5. Test upload
+uvicorn app.main:app --reload
+# POST image to /classify → Check MinIO console for uploaded images
+```
+
+**Verify uploads:**
+```bash
+# Browse uploaded images in MinIO Console
+# http://localhost:9001/buckets/agent-hub-images-dev/browse
+
+# Structure: {tenant}/{YYYY-MM-DD}/{trace_id}.jpg
+# Example: unarino/2025-11-25/abc-123-def.jpg
+```
+
+### Production Deployment with Cloudflare R2
+
+**Why Cloudflare R2?**
+- ✅ 100% S3 API compatible (uses same boto3 code)
+- ✅ **ZERO egress costs** (vs $0.09/GB on AWS S3)
+- ✅ 10 GB storage free/month
+- ✅ Cheaper than AWS ($0.015/GB vs $0.023/GB)
+- ✅ No surprise bills from bandwidth
+
+**Setup (10 minutes):**
+
+```bash
+# 1. Create Cloudflare Account
+# Visit: https://dash.cloudflare.com/sign-up
+
+# 2. Enable R2
+# Dashboard → R2 → Enable R2 (free tier available)
+
+# 3. Create Bucket
+# R2 Dashboard → Create Bucket → "agent-hub-images-prod"
+
+# 4. Generate Access Keys
+# R2 Dashboard → Manage R2 API Tokens → Create API Token
+# Copy: Access Key ID and Secret Access Key
+
+# 5. Get Account ID
+# R2 Dashboard → Account ID (top right)
+
+# 6. Configure Railway Environment Variables
+# Railway Dashboard → Your Project → Variables:
+AWS_ACCESS_KEY_ID=your-r2-access-key-id
+AWS_SECRET_ACCESS_KEY=your-r2-secret-access-key
+AWS_REGION=auto
+S3_BUCKET=agent-hub-images-prod
+AWS_ENDPOINT_URL=https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+
+# 7. Deploy
+railway up
+```
+
+**Cost Comparison (100 GB storage + 500 GB transfer/month):**
+
+| Provider | Storage Cost | Egress Cost | Total |
+|----------|-------------|-------------|-------|
+| **Cloudflare R2** | $1.50/month | **FREE** | **$1.50/month** ⭐ |
+| AWS S3 | $2.30/month | $45.00/month | $47.30/month |
+| Google Cloud Storage | $2.00/month | $60.00/month | $62.00/month |
+
+### Alternative: AWS S3 (Original)
+
+```bash
+# .env configuration for AWS S3
+AWS_ACCESS_KEY_ID=your-aws-access-key-id
+AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
+AWS_REGION=us-east-1
+S3_BUCKET=agent-hub-images-prod
+# Leave AWS_ENDPOINT_URL empty for AWS S3
+```
+
+### Alternative: DigitalOcean Spaces
+
+```bash
+# .env configuration for DO Spaces
+AWS_ACCESS_KEY_ID=your-spaces-key
+AWS_SECRET_ACCESS_KEY=your-spaces-secret
+AWS_REGION=nyc3
+S3_BUCKET=agent-hub-images
+AWS_ENDPOINT_URL=https://nyc3.digitaloceanspaces.com
+```
+
+**Pricing:** $5/month flat (250 GB storage + 1 TB bandwidth included)
+
+### Image Upload Behavior
+
+**Non-blocking uploads:**
+```python
+# Classification response returns immediately
+# Image upload happens in background (asyncio.create_task)
+
+POST /classify → Response in <1s
+Background: S3 upload (3-5s) → Automatic retry on failure
+```
+
+**Retry logic:**
+- Automatic retry with exponential backoff (1s, 2s, 4s)
+- Maximum 3 attempts
+- Failures logged but DO NOT abort classification
+
+**S3 Key Structure:**
+```
+{tenant}/{YYYY-MM-DD}/{trace_id}.jpg
+
+Examples:
+unarino/2025-11-25/abc-123-def.jpg
+unarino/2025-11-25/xyz-789-ghi.jpg
+unarino/2025-11-26/new-trace-id.jpg
+```
+
+### Testing S3 Integration
+
+**Unit tests (mocked):**
+```bash
+# Test S3Service with mocked boto3
+pytest tests/unit/test_s3_service.py -v
+
+# Coverage report
+pytest tests/unit/test_s3_service.py --cov=app.services.s3_service --cov-report=term
+# Expected: >95% coverage
+```
+
+**Integration tests (real S3):**
+```bash
+# Test with real MinIO/R2 (requires running service)
+RUN_S3_INTEGRATION_TESTS=1 pytest tests/integration/test_s3_upload.py -v
+```
+
+**Manual verification:**
+```bash
+# 1. Start MinIO
+docker start minio
+
+# 2. Upload test image
+curl -X POST "http://localhost:8000/classify" \
+  -H "Content-Type: multipart/form-data" \
+  -F "image=@test_image.jpg" \
+  -F "tenant_id=test" \
+  -F "station_id=TEST-01"
+
+# 3. Check MinIO Console
+# http://localhost:9001/buckets/agent-hub-images-dev/browse
+# Should see: test/2025-11-25/{trace-id}.jpg
+```
+
+### Troubleshooting
+
+**MinIO connection refused:**
+```bash
+# Check MinIO is running
+docker ps | grep minio
+
+# Restart MinIO
+docker restart minio
+
+# Check logs
+docker logs minio
+```
+
+**R2 authentication errors:**
+```bash
+# Verify credentials
+echo $AWS_ACCESS_KEY_ID
+echo $AWS_ENDPOINT_URL
+
+# Test with AWS CLI
+aws s3 ls s3://your-bucket --endpoint-url=https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+```
+
+**Upload failures in logs:**
+```bash
+# Search logs for S3 errors
+railway logs | grep "s3_upload"
+
+# Common issues:
+# - Wrong endpoint URL
+# - Invalid credentials
+# - Bucket doesn't exist
+# - Network connectivity
+```
+
 ## 📊 Performance Targets
 
 - **Latency**: p95 < 3000ms (complete pipeline with 10 agents)

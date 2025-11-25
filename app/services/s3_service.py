@@ -63,6 +63,13 @@ class S3Service:
         """
         Initialize S3Service with boto3 client.
 
+        Supports S3-compatible services through custom endpoint URL:
+        - AWS S3 (default)
+        - MinIO (local development)
+        - Cloudflare R2 (production)
+        - DigitalOcean Spaces
+        - Any S3-compatible storage
+
         Args:
             bucket_name: S3 bucket name (defaults to settings.S3_BUCKET)
             max_retries: Maximum number of upload attempts (default: 3)
@@ -72,19 +79,27 @@ class S3Service:
         self.max_retries = max_retries
         self.base_delay = base_delay
 
-        # Initialize boto3 S3 client with credentials from settings
-        self.s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_REGION,
-        )
+        # Build boto3 client configuration
+        client_config = {
+            "service_name": "s3",
+            "aws_access_key_id": settings.AWS_ACCESS_KEY_ID,
+            "aws_secret_access_key": settings.AWS_SECRET_ACCESS_KEY,
+            "region_name": settings.AWS_REGION,
+        }
+
+        # Add custom endpoint for S3-compatible services (MinIO, R2, Spaces, etc.)
+        if settings.AWS_ENDPOINT_URL:
+            client_config["endpoint_url"] = settings.AWS_ENDPOINT_URL
+
+        # Initialize boto3 S3 client
+        self.s3_client = boto3.client(**client_config)
 
         logger.info(
             "s3_service_initialized",
             bucket=self.bucket_name,
             max_retries=self.max_retries,
             region=settings.AWS_REGION,
+            endpoint_url=settings.AWS_ENDPOINT_URL or "default (AWS S3)",
         )
 
     def generate_s3_key(self, tenant_id: str, trace_id: str) -> str:

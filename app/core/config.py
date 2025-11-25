@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = Field(default=None)
 
     # AWS S3 Configuration (Optional - for background image uploads)
+    # Supports S3-compatible services: AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces
     AWS_ACCESS_KEY_ID: str | None = Field(
         default=None,
         description="AWS access key ID for S3 uploads",
@@ -114,6 +115,10 @@ class Settings(BaseSettings):
     S3_BUCKET: str = Field(
         default="agent-hub-images",
         description="S3 bucket name for image storage",
+    )
+    AWS_ENDPOINT_URL: str | None = Field(
+        default=None,
+        description="Custom S3 endpoint URL for S3-compatible services (MinIO, R2, Spaces, etc.)",
     )
 
     # Backend Rails API Configuration
