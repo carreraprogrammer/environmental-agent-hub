@@ -1,6 +1,37 @@
 # Agent Hub – Project Requirements Spec V4.0 (Hybrid Edge + Backend Architecture)
 
-## 🔄 ACTUALIZACIÓN IMPORTANTE (Nov 2025)
+## 🔄 ACTUALIZACIONES IMPORTANTES
+
+### v4.2 - Fast Path + Consensus Architecture (Dic 2025)
+
+**Fast Path Architecture implementada (RF-016):**
+- ✅ **FastClassifier (Roboflow)** - Clasificación ultra-rápida <1s
+- ✅ **ValidationPipeline** - Gemini valida en background sin bloquear respuesta
+- ✅ **ENABLE_FAST_PATH=true** - Feature flag activo
+- ✅ **Latencia: 570ms (local), 1.8s (Docker)** - Mejora 9-12x vs baseline
+
+**Consensus Architecture implementada (RF-015):**
+- ✅ **ConsensusClassificationAgent** - Ensemble multi-modelo
+- ✅ **GPT-4o primary + Gemini secondary + Roboflow tiebreaker**
+- ✅ **4 estrategias:** Agreement Boost, Confidence-Based, Tie-Breaker, Conservative Fallback
+
+**Resultados de validación:**
+| Métrica | Resultado | Target |
+|---------|-----------|--------|
+| Agreement Rate | 33.3% (2/6) | >85% |
+| PLASTIC Accuracy | 100% (2/2) | >85% |
+| NO_WASTE Accuracy | 0% (0/4) | >85% |
+| Fast Path Latency (local) | 570ms | <1000ms ✅ |
+| Fast Path Latency (Docker) | 1801ms | <1000ms ⚠️ |
+
+**Archivos implementados:**
+- `app/agents/fast_classifier.py` - FastClassifier
+- `app/orchestrator/fast_pipeline.py` - ValidationPipeline
+- `app/agents/consensus_classifier.py` - ConsensusClassificationAgent
+- `scripts/benchmark_fast_path.py` - Benchmark
+- `scripts/validate_fast_vs_full_pipeline.py` - Validación
+
+### v4.1 - PreValidator movido a cliente (Nov 2025 - EDV-58)
 
 **PreValidator movido a cliente (EDV-58):**
 - ✅ **Validación de residuos ahora es client-side** - backend solo recibe imágenes válidas
@@ -314,12 +345,108 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 
 ### 4.5 Observability
 
-**RF-V4-010**: El sistema DEBE loggear métricas estructuradas
-- **Métricas PreValidator**:
-  - `prevalidator_layer1_rejects` (por reason: format, size, dimensions)
-  - `prevalidator_layer2_rejects` (no waste detected)
-  - `prevalidator_fallback_activations` (Roboflow errors)
-  - `prevalidator_latency_ms` (histogram)
+### 4.6 Fast Path Classification (V4.2)
+
+**RF-V4-011**: El sistema DEBE soportar Fast Path con respuesta ultra-rápida
+- **Componentes**:
+  1. **FastClassifier**: Roboflow classification <1s
+  2. **ValidationPipeline**: Background Gemini validation
+- **Feature Flag**: `ENABLE_FAST_PATH=true`
+- **Umbral de confianza**: `FAST_PATH_CONFIDENCE_THRESHOLD=0.70`
+- **Output Schema**:
+  ```python
+  {
+    "material": "PLASTIC",
+    "confidence": 0.85,
+    "color": "AZUL",
+    "message": "Residuo plástico...",
+    "should_validate": true,  # Si confidence < threshold
+    "mode": "fast",
+    "latency_ms": 570
+  }
+  ```
+- **Criterio de aceptación**:
+  - ✅ Latencia <1000ms (p95) en entorno local
+  - ✅ Background validation no bloquea respuesta
+  - ✅ Feature flag permite desactivar sin deploy
+
+**RF-V4-012**: El sistema DEBE validar clasificaciones Fast Path en background
+- **Trigger**: Fast Path confidence < threshold OR always (configurable)
+- **Proceso background**:
+  1. MaterialClassifier (Gemini) clasifica imagen
+  2. Compara resultado con Fast Path
+  3. Si mismatch: log discrepancy + sync to backend
+- **Métricas**:
+  - `fast_path_validations_total` (counter)
+  - `fast_path_mismatches_total` (counter)
+  - `fast_path_agreement_rate` (gauge)
+- **Criterio de aceptación**:
+  - ✅ ValidationPipeline ejecuta async (no bloquea)
+  - ✅ Mismatches loggeados con trace_id
+  - ✅ Backend recibe clasificación corregida si mismatch
+
+**RF-V4-013**: El sistema DEBE soportar Fast Path con Roboflow
+- **Endpoint Roboflow**: `/classify` via `RoboflowAdapter.classify_bytes()`
+- **Modelo**: `basura-3pmgm` (entrenado con 6 clases)
+- **Timeout**: 3 segundos
+- **Fallback**: Si Roboflow falla → Consensus Pipeline
+- **Criterio de aceptación**:
+  - ✅ Roboflow procesa imagen en <1s
+  - ✅ Timeout → fallback a Consensus
+  - ✅ Error handling con retry exponencial
+
+### 4.7 Consensus Classification (V4.2)
+
+**RF-V4-014**: El sistema DEBE soportar clasificación por consenso multi-modelo
+- **Modelos participantes**:
+  1. **Primary**: GPT-4o (confidence ≥0.70 = fast path)
+  2. **Secondary**: Gemini 2.5 Flash (consulted when <0.70)
+  3. **Tiebreaker**: Roboflow (cuando modelos disagree)
+- **Output Schema**:
+  ```python
+  {
+    "material": "PLASTIC",
+    "confidence": 0.92,
+    "consensus_strategy": "AGREEMENT_BOOST",
+    "models_consulted": ["gpt-4o", "gemini-2.5-flash"],
+    "votes": {
+      "gpt-4o": {"material": "PLASTIC", "confidence": 0.85},
+      "gemini": {"material": "PLASTIC", "confidence": 0.90}
+    }
+  }
+  ```
+- **Criterio de aceptación**:
+  - ✅ Multi-modelo cuando primary confidence <0.70
+  - ✅ Tiebreaker cuando modelos disagree
+  - ✅ Logs incluyen votes de cada modelo
+
+**RF-V4-015**: El sistema DEBE implementar estrategias de consenso
+- **Estrategias**:
+  1. **Agreement Boost**: Modelos coinciden → confidence +0.10
+  2. **Confidence-Based**: Mayor confidence gana
+  3. **Tie-Breaker**: Roboflow decide empates
+  4. **Conservative Fallback**: Ante duda, material más seguro (ORGANIC → compostable)
+- **Configuración**:
+  - `CONSENSUS_THRESHOLD=0.70` (umbral para consultar secundario)
+  - `AGREEMENT_BOOST=0.10` (incremento por consenso)
+- **Criterio de aceptación**:
+  - ✅ Estrategias seleccionables por config
+  - ✅ Logs incluyen estrategia usada
+  - ✅ Métricas por estrategia
+
+### 4.8 Observability
+
+**RF-V4-016**: El sistema DEBE loggear métricas estructuradas
+- **Métricas FastPath**:
+  - `fast_path_latency_ms` (histogram)
+  - `fast_path_confidence` (histogram)
+  - `fast_path_fallback_rate` (gauge)
+  - `fast_path_agreement_rate` (gauge)
+- **Métricas Consensus**:
+  - `consensus_latency_ms` (histogram)
+  - `consensus_models_consulted` (counter by model)
+  - `consensus_strategy_used` (counter by strategy)
+  - `consensus_tiebreaker_activations` (counter)
 - **Métricas MaterialClassifier**:
   - `material_classifier_latency_ms` (histogram)
   - `material_classifier_cost_usd` (counter)
@@ -497,6 +624,68 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 - Logs marcan fallback_used: true para análisis
 - Alert generado para equipo DevOps
 
+### 6.5 Fast Path - Clasificación Ultra-Rápida (V4.2)
+
+**Precondiciones:**
+- ENABLE_FAST_PATH=true
+- Usuario captura imagen de botella plástica
+- Roboflow está disponible
+
+**Flujo:**
+1. Cliente envía POST /classify con image_bytes
+2. **FastClassifier**: Roboflow clasifica en ~500ms
+3. **Roboflow Response**:
+   ```json
+   {
+     "material": "PLASTIC",
+     "confidence": 0.85,
+     "class": "plastic",
+     "roboflow_predictions": [{"class": "plastic", "confidence": 0.85}]
+   }
+   ```
+4. Sistema retorna 200 OK inmediatamente con clasificación
+5. **Background (async)**: ValidationPipeline valida con Gemini
+6. Si match: log success, no action
+7. Si mismatch: log discrepancy, sync corrected result to backend
+8. Total latency: 570ms (usuario)
+9. Validation latency: ~2s (background)
+
+**Postcondiciones:**
+- Usuario recibe respuesta en <1s
+- Backend recibe clasificación corregida si hay mismatch
+- Logs incluyen fast_path_mode: true
+
+### 6.6 Consensus Classification - Multi-Modelo (V4.2)
+
+**Precondiciones:**
+- Primary model (GPT-4o) confidence < 0.70
+- O Fast Path deshabilitado (ENABLE_FAST_PATH=false)
+
+**Flujo:**
+1. Cliente envía POST /classify con image_bytes
+2. **ConsensusClassificationAgent**: GPT-4o clasifica primero
+3. **GPT-4o Response**: confidence 0.65 (<0.70 threshold)
+4. **Gemini consulted**: Clasifica misma imagen
+5. **Consensus evaluation**:
+   - Si agree: boost confidence +0.10 → 0.75
+   - Si disagree: Roboflow tiebreaker
+6. **Final Result**:
+   ```json
+   {
+     "material": "PLASTIC",
+     "confidence": 0.75,
+     "consensus_strategy": "AGREEMENT_BOOST",
+     "models_consulted": ["gpt-4o", "gemini-2.5-flash"]
+   }
+   ```
+7. Total latency: 2.5s
+8. Total cost: ~$0.015 (2 LLM calls)
+
+**Postcondiciones:**
+- Usuario recibe clasificación de alta confianza
+- Logs incluyen consensus_strategy y votes de cada modelo
+- Métricas de tiebreaker activations
+
 ## 7) Métricas de Éxito V4 (Para Tesis)
 
 ### 7.1 Métricas Técnicas
@@ -510,7 +699,36 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 | Accuracy (Volume ±25%) | N/A | 70% | 73% | New |
 | Backend agents | 10 | 5-6 | 5 | 50% ↓ |
 
-### 7.2 Métricas Ambientales (Para Tesis)
+### 7.2 Métricas Fast Path + Consensus (V4.2)
+
+| Métrica | Target | Actual (Dic 2025) | Estado |
+|---------|--------|-------------------|--------|
+| Fast Path Latency (local) | <1000ms | 570ms | ✅ CUMPLIDO |
+| Fast Path Latency (Docker) | <1000ms | 1801ms | ⚠️ PARCIAL |
+| Roboflow-Gemini Agreement | >85% | 33.3% | ❌ REQUIERE ENTRENAMIENTO |
+| PLASTIC Accuracy | >85% | 100% | ✅ CUMPLIDO |
+| NO_WASTE Detection | >85% | 0% | ❌ CRÍTICO |
+| Fast Mode Rate | 100% | 100% | ✅ CUMPLIDO |
+| Consensus Latency | <3000ms | 1500-3000ms | ✅ CUMPLIDO |
+
+**Notas de validación (scripts/validate_fast_vs_full_pipeline.py):**
+- Total imágenes validadas: 6
+- Agreements: 2/6 (33.3%)
+- PLASTIC: 2/2 (100%) - Roboflow bien entrenado para plásticos
+- NO_WASTE: 0/4 (0%) - Roboflow misclasifica imágenes vacías como PAPER/METAL/ORGANIC
+
+**Benchmark results (scripts/benchmark_fast_path.py via Docker):**
+- Cold start: 2936ms
+- Warmed average: 1801ms
+- Min: 1542ms, Max: 2379ms
+- Target <1s: No alcanzado en Docker (network overhead)
+
+**Próximos pasos:**
+1. Reentrenar modelo Roboflow con más imágenes NO_WASTE
+2. Optimizar latencia Docker (investigar network overhead)
+3. Aumentar validation dataset (>100 imágenes)
+
+### 7.3 Métricas Ambientales (Para Tesis)
 
 **Granularidad de datos:**
 - V3: Material + color
@@ -525,7 +743,7 @@ Sistema de IA con arquitectura híbrida que clasifica residuos y **genera datos 
 - Target: <20% (mayoría de scans tienen todos los campos)
 - Permite analizar qué campos son más difíciles de detectar
 
-### 7.3 Métricas de Investigación (Para Tesis)
+### 7.4 Métricas de Investigación (Para Tesis)
 
 **Comparación de modelos:**
 - OpenAI GPT-4o: Accuracy X%, Latency Y ms, Cost $Z
