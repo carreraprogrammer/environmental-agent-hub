@@ -62,6 +62,18 @@ class Settings(BaseSettings):
         default="openai-gpt4",
         description="Active model: openai-gpt4|openai-gpt4o|claude|gemini|roboflow|consensus",
     )
+    
+    # Fast Path Configuration (Roboflow + Background Validation)
+    ENABLE_FAST_PATH: bool = Field(
+        default=False,
+        description="Enable fast response with Roboflow + background validation",
+    )
+    FAST_PATH_CONFIDENCE_THRESHOLD: float = Field(
+        default=0.70,
+        ge=0.0,
+        le=1.0,
+        description="Min confidence for fast path (below this, use full pipeline)",
+    )
 
     # Consensus Configuration
     UNCERTAINTY_THRESHOLD: float = Field(

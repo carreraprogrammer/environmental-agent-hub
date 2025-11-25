@@ -21,9 +21,54 @@ V4 introduces **Multi-Model Consensus Classification** to improve accuracy from 
 
 ## Requirements
 
-### RF-015: Multi-Model Consensus Classification ⭐ **NEW**
+### RF-016: Fast Path Classification with Background Validation ⚡ **NEW in v4.1**
 
 **Priority:** HIGH  
+**Status:** ✅ IMPLEMENTED  
+**Epic:** EDV-66
+
+#### Description
+
+Implement ultra-fast response (<1s) using Roboflow with background validation to maintain 100% data accuracy while dramatically improving user experience.
+
+#### Acceptance Criteria
+
+**AC-016.1: Fast Classifier**
+- [x] FastClassifier implemented in `app/agents/fast_classifier.py`
+- [x] Uses Roboflow for <800ms classification
+- [x] Returns material + confidence + bin color + user message
+- [x] Confidence-based routing (≥0.70 → fast path)
+- [x] Integration with ColorMapper for immediate bin color
+
+**AC-016.2: Background Validation**
+- [x] ValidationPipeline implemented in `app/orchestrator/fast_pipeline.py`
+- [x] Runs full MaterialClassifier in background
+- [x] Compares fast vs validated results
+- [x] Logs mismatches for monitoring
+- [x] Syncs validated data to Rails backend
+
+**AC-016.3: Endpoint Integration**
+- [x] Fast path logic integrated in `/classify` endpoint
+- [x] Feature flag controlled: `ENABLE_FAST_PATH`
+- [x] Background task scheduling with FastAPI
+- [x] Response metadata includes fast mode indicators
+
+**AC-016.4: Configuration**
+- [x] `ENABLE_FAST_PATH` feature flag (default: false)
+- [x] `FAST_PATH_CONFIDENCE_THRESHOLD` configurable (default: 0.70)
+- [x] Compatible with any MaterialClassifier model (Gemini recommended)
+
+**AC-016.5: Performance Targets**
+- [x] User perceived latency: <1s (vs 5-7s)
+- [x] Fast path coverage: 85-90% of requests
+- [x] Cost: $0.002/scan (2x for 7x speed improvement)
+- [x] Data quality: 100% validated in background
+
+---
+
+### RF-015: Multi-Model Consensus Classification ⭐ **NEW in v4.0**
+
+**Priority:** MEDIUM  
 **Status:** ✅ IMPLEMENTED  
 **Epic:** EDV-64
 

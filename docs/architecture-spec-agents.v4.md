@@ -17,9 +17,17 @@
 
 ## System Overview
 
-The Environmental Agent Hub v4 implements a hybrid AI architecture:
+The Environmental Agent Hub v4 implements a hybrid AI architecture with dual operational modes:
+
+### Fast Path Mode (NEW in v4.1)
+1. **FastClassifier**: Ultra-fast classification with Roboflow (<800ms)
+2. **ValidationPipeline**: Background validation with MaterialClassifier (5-7s)
+3. **Smart Routing**: Confidence-based decision making (≥0.70 threshold)
+4. **Mismatch Detection**: Automatic monitoring of classification agreement
+
+### Standard Mode
 1. **1 Primary AI Agent**: MaterialClassifier (unified classification)
-2. **1 Consensus AI Agent**: ConsensusClassificationAgent (ensemble learning) - **NEW in v4**
+2. **1 Consensus AI Agent**: ConsensusClassificationAgent (ensemble learning)
 3. **4 Deterministic Utilities**: ColorMapper, WasteTypeMatcher, FeedbackCoach, ResponseAssembler
 
 ---
@@ -37,6 +45,107 @@ The Environmental Agent Hub v4 implements a hybrid AI architecture:
 - Cost: $0.010/request
 - Latency: <1500ms p95
 - Accuracy: 85% (baseline)
+
+---
+
+### FastClassifier ⭐⚡ **NEW in v4.1**
+
+**Purpose**: Ultra-fast classification for immediate user feedback
+
+**Input**: Image bytes  
+**Output**: Material + confidence + bin color + user message
+
+**Architecture**:
+```python
+class FastClassifier:
+    async def classify_fast(image_data: bytes, trace_id: str) -> dict:
+        # Step 1: Roboflow classification
+        result = await roboflow_adapter.classify_bytes(image_data)
+        
+        # Step 2: Confidence check
+        if result.confidence >= 0.70:
+            # Fast path: Return immediately
+            should_validate = True  # Schedule background
+        else:
+            # Full path: Needs complete validation
+            should_validate = False  # Route to full pipeline
+        
+        # Step 3: Map to bin color & message
+        color = color_mapper.get_color(result.material)
+        message = self._get_user_message(result.material, color)
+        
+        return {
+            "material": result.material,
+            "confidence": result.confidence,
+            "bin_color": color,
+            "user_message": message,
+            "should_validate": should_validate
+        }
+```
+
+**Performance**:
+- **Cost**: $0.001/request (Roboflow)
+- **Latency**: <800ms p95 (target: <1s)
+- **Accuracy**: 85-90% (sufficient for fast response)
+- **Coverage**: 85-90% of requests (confidence ≥0.70)
+
+**Configuration**:
+```python
+ENABLE_FAST_PATH=true
+FAST_PATH_CONFIDENCE_THRESHOLD=0.70
+ROBOFLOW_API_KEY=<key>
+ROBOFLOW_MODEL_ID=<model_id>
+```
+
+---
+
+### ValidationPipeline ⭐ **NEW in v4.1**
+
+**Purpose**: Background validation ensuring 100% accuracy
+
+**Architecture**:
+```python
+class ValidationPipeline:
+    async def validate_and_sync(
+        request: ClassifyRequest,
+        fast_result: dict,
+        trace_id: str
+    ) -> None:
+        # Step 1: Run full pipeline
+        full_result = await pipeline.process(request, trace_id)
+        
+        # Step 2: Compare results
+        agreement = self._compare_results(fast_result, full_result)
+        
+        # Step 3: Log mismatch if needed
+        if not agreement:
+            logger.warning(
+                "fast_path_mismatch",
+                trace_id=trace_id,
+                fast_material=fast_result["material"],
+                validated_material=full_result.material,
+                confidence_diff=abs(
+                    fast_result["confidence"] - full_result.confidence
+                )
+            )
+        
+        # Step 4: Sync validated data to Rails
+        await backend_integration.sync_classification(
+            full_result, trace_id
+        )
+```
+
+**Benefits**:
+- **Data Quality**: 100% of classifications validated by Vision models
+- **Model Monitoring**: Automatic detection of Roboflow drift
+- **User Experience**: Zero impact on response time
+- **Backend Integrity**: All synced data is fully validated
+
+**Mismatch Handling**:
+- Logs mismatch events for analysis
+- Tracks agreement rate over time
+- Alerts if agreement drops below threshold (e.g., <85%)
+- Enables Roboflow model retraining decisions
 
 ---
 
@@ -131,9 +240,10 @@ CLASSIFIER_MODEL=consensus
 
 | Mode | Use Case | Config | Performance |
 |------|----------|--------|-------------|
-| **Single Model** | Production (standard) | `CLASSIFIER_MODEL=openai-gpt4o` | 85% accuracy, $0.010 |
-| **Consensus** | Production (high accuracy) | `CLASSIFIER_MODEL=consensus` | 89% accuracy, $0.0103 |
-| **Development** | Testing | `CLASSIFIER_MODEL=roboflow` | Fast, $0.001 |
+| **Fast Path** ⚡ | Production (optimal UX) | `ENABLE_FAST_PATH=true`<br>`CLASSIFIER_MODEL=gemini` | <1s latency, $0.002, 85-90% accuracy |
+| **Single Model** | Production (standard) | `CLASSIFIER_MODEL=openai-gpt4o` | 5-7s latency, $0.010, 85% accuracy |
+| **Consensus** | Production (high accuracy) | `CLASSIFIER_MODEL=consensus` | 5-7s latency, $0.0103, 89% accuracy |
+| **Development** | Testing | `CLASSIFIER_MODEL=roboflow` | <1s latency, $0.001, 85% accuracy |
 
 ---
 

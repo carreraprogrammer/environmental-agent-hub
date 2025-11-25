@@ -3,6 +3,7 @@ fastapi>=0.110.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.8.0
 pydantic-settings>=2.4.0
+python-multipart>=0.0.9
 
 # Configuration & Utils
 python-dotenv==1.0.0
@@ -15,6 +16,7 @@ openai>=1.0.0
 anthropic>=0.7.0
 google-generativeai>=0.8.0
 roboflow>=1.1.0
+inference-sdk>=0.9.20
 
 # AWS S3
 boto3>=1.28.0

@@ -1,6 +1,38 @@
 # Agent Hub – Architecture Specification V4.0 (Hybrid Edge + Backend)
 
-## 🔄 ACTUALIZACIÓN V4.1 (Nov 2025 - EDV-58)
+## 🔄 ACTUALIZACIONES IMPORTANTES
+
+### v4.2 - Fast Path + Consensus Architecture (Dic 2025)
+
+**Fast Path Architecture implementada:**
+- ✅ **FastClassifier (Roboflow)** - Clasificación ultra-rápida <1s
+- ✅ **ValidationPipeline** - Gemini valida en background sin bloquear respuesta
+- ✅ **ENABLE_FAST_PATH=true** - Feature flag activo en producción
+- ✅ **ConsensusClassificationAgent** - Ensemble multi-modelo cuando Fast Path no aplica
+
+**Resultados de validación (scripts/validate_fast_vs_full_pipeline.py):**
+| Métrica | Resultado |
+|---------|-----------|
+| Agreement Rate | 33.3% (2/6) |
+| PLASTIC Accuracy | 100% (2/2) |
+| NO_WASTE Accuracy | 0% (0/4) |
+| Roboflow Avg Confidence | 0.865 |
+| Gemini Avg Confidence | 0.983 |
+
+**Resultados de benchmark (scripts/benchmark_fast_path.py):**
+| Entorno | Latencia Cold | Latencia Warmed | Target |
+|---------|--------------|-----------------|--------|
+| Local | N/A | 570ms | ✅ <1s |
+| Docker | 2936ms | 1801ms | ⚠️ ~2x target |
+
+**Archivos implementados:**
+- `app/agents/fast_classifier.py` - FastClassifier con Roboflow
+- `app/orchestrator/fast_pipeline.py` - ValidationPipeline background
+- `app/agents/consensus_classifier.py` - Ensemble multi-modelo
+- `scripts/benchmark_fast_path.py` - Benchmark de performance
+- `scripts/validate_fast_vs_full_pipeline.py` - Validación Roboflow vs Gemini
+
+### v4.1 - PreValidator movido a cliente (Nov 2025 - EDV-58)
 
 **PreValidator eliminado del backend:**
 - ✅ **Validación movida a client-side** - backend recibe solo imágenes válidas
@@ -100,9 +132,105 @@ Latencia: ~1000ms (70% mejora vs V3, 17% vs V4.0)
 Agentes backend: 6 (5 processing + 1 assembler)
 ```
 
+**V4.2 Architecture (Fast Path + Consensus):**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    FAST PATH FLOW                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Request → FastClassifier (Roboflow) → Response <1s         │
+│                    ↓                                         │
+│            Background Async:                                 │
+│            ValidationPipeline (Gemini) → Sync to Backend     │
+│                                                              │
+│  Latency: 570ms (local), 1.8s (Docker)                      │
+│  Target: <1s first response                                  │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│                   CONSENSUS FLOW (fallback)                  │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Request → ConsensusClassificationAgent                      │
+│                ↓                                             │
+│         ┌─────────────────┐                                  │
+│         │  GPT-4o (primary)                                  │
+│         │  confidence ≥0.70 → fast path                     │
+│         │  confidence <0.70 → consult Gemini                │
+│         └─────────────────┘                                  │
+│                ↓                                             │
+│         ┌─────────────────┐                                  │
+│         │  Gemini (secondary)                                │
+│         │  agrees → boost confidence                        │
+│         │  disagrees → Roboflow tiebreaker                  │
+│         └─────────────────┘                                  │
+│                                                              │
+│  Latency: 1.5-3s                                            │
+│  Target: High accuracy when Fast Path uncertain              │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+
+Modos de deployment:
+| Variable               | Modo Fast | Modo Consensus | Modo Híbrido |
+|------------------------|-----------|----------------|--------------|
+| ENABLE_FAST_PATH       | true      | false          | true         |
+| Fast Path Threshold    | 0.70      | N/A            | 0.70         |
+| Background Validation  | Gemini    | N/A            | Gemini       |
+| Fallback               | Consensus | Consensus      | Consensus    |
+
+Feature flags:
+- ENABLE_FAST_PATH=true → Fast Path activo
+- FAST_PATH_CONFIDENCE_THRESHOLD=0.70 → Umbral mínimo
+- CLASSIFIER_MODEL=gemini → Modelo para validation pipeline
+```
+
 ### 1.2 Decisiones Arquitectónicas Clave
 
-#### 1.2.1 Edge Computing (Cliente)
+#### 1.2.1 Fast Path Architecture (V4.2 - Dic 2025)
+**Decisión:** Roboflow responde inmediatamente, Gemini valida en background
+**Rationale:**
+- **UX Priority:** Usuario recibe respuesta en <1s
+- **Accuracy garantizada:** Gemini valida y corrige en background
+- **Best of both:** Speed de Roboflow + accuracy de LLM
+
+**Implementación:**
+```python
+# app/agents/fast_classifier.py
+class FastClassifier:
+    async def classify_fast(image_data, trace_id) -> FastClassificationResult:
+        # Roboflow classification <1s
+        # Returns: material, confidence, color, message, should_validate
+
+# app/orchestrator/fast_pipeline.py  
+class ValidationPipeline:
+    async def validate_and_sync(request, fast_result, trace_id):
+        # Background: Gemini validation
+        # Sync to backend if mismatch detected
+```
+
+**Resultados actuales:**
+- Latencia: 570ms (local), 1.8s (Docker)
+- Agreement rate: 33.3% (Roboflow vs Gemini)
+- PLASTIC accuracy: 100%
+- NO_WASTE accuracy: 0% (requiere reentrenamiento Roboflow)
+
+**Trade-offs aceptados:**
+- 33.3% agreement inicial (modelo Roboflow requiere más entrenamiento)
+- Latencia Docker ~2x vs local (network overhead)
+
+#### 1.2.2 Consensus Architecture (V4.2)
+**Decisión:** Ensemble multi-modelo para alta confianza
+**Rationale:**
+- **Uncertainty handling:** Cuando GPT-4o no está seguro, consultar Gemini
+- **Tiebreaker:** Roboflow resuelve desacuerdos entre LLMs
+- **Confidence boost:** Acuerdo entre modelos aumenta confianza final
+
+**Estrategias implementadas:**
+1. **Agreement Boost:** Modelos coinciden → confidence +0.10
+2. **Confidence-Based:** Mayor confidence gana
+3. **Tie-Breaker:** Roboflow decide empates
+4. **Conservative Fallback:** Ante duda, Material más conservador
+
+#### 1.2.3 Edge Computing (Cliente)
 **Decisión:** Mover object detection a cliente (Roboflow local)
 **Rationale:**
 - Reducción de latencia: 0ms para detección inicial
@@ -112,7 +240,7 @@ Agentes backend: 6 (5 processing + 1 assembler)
 
 **Implementación futura:** Ticket EDV-XX
 
-#### 1.2.2 PreValidator Eliminado (V4.1 - EDV-58)
+#### 1.2.4 PreValidator Eliminado (V4.1 - EDV-58)
 **Decisión:** Eliminar PreValidator del backend, validación client-side
 **Rationale:**
 - **ROI negativo:** Solo ahorra $9/mes con <1% troll rate (necesita >0.75% para justificar)
@@ -131,7 +259,7 @@ Agentes backend: 6 (5 processing + 1 assembler)
 1. **Layer 1:** Technical validations (formato, tamaño, dimensiones)
 2. **Layer 2:** Roboflow Object Detection (waste presence)
 
-#### 1.2.3 MaterialClassifier Unificado
+#### 1.2.5 MaterialClassifier Unificado
 **Decisión:** Fusionar Classifier + SubtypeDetector + VolumeEstimator → MaterialClassifier
 **Rationale:**
 - **Latencia:** 3 llamadas LLM → 1 llamada = 66% reducción
@@ -143,7 +271,7 @@ Agentes backend: 6 (5 processing + 1 assembler)
 - Pérdida de granularidad en logs (antes: 3 agentes, ahora: 1)
 - Mitigación: Per-field confidences permiten análisis granular
 
-#### 1.2.4 Per-Field Confidences
+#### 1.2.6 Per-Field Confidences
 **Decisión:** Cada campo retorna su propio confidence score
 **Rationale:**
 - **Partial Success:** Sistema puede continuar si volume confidence es bajo

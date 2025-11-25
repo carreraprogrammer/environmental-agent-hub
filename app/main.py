@@ -53,8 +53,12 @@ except Exception as e:
         allow_headers=["*"],
     )
 
+# Import classification router
+from app.api.endpoints.classify import router as classify_router
+
 # Include routers
 app.include_router(health_router)
+app.include_router(classify_router)
 
 
 @app.on_event("startup")
@@ -157,7 +161,6 @@ async def debug_info():
     }
 
 
-# Import routers (futuro)
-# from app.api.endpoints import classify, models
-# app.include_router(classify.router)
+# Note: Future routers can be added here
+# from app.api.endpoints import models
 # app.include_router(models.router)

@@ -47,6 +47,13 @@ class ResponseMeta(BaseModel):
     backend_integration: bool = Field(
         default=False, description="Whether backend integration was performed"
     )
+    
+    # Fast Path metadata (optional)
+    fast_mode: bool = Field(default=False, description="Whether fast path was used")
+    validation_status: str = Field(default="complete", description="Validation status (pending/complete)")
+    fast_response_material: str | None = Field(default=None, description="Material from fast response")
+    validation_agreement: bool | None = Field(default=None, description="Agreement between fast and validated")
+    confidence_diff: float | None = Field(default=None, description="Confidence difference")
 
 
 class EnvironmentalImpact(BaseModel):
