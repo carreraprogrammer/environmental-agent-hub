@@ -21,12 +21,11 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.exceptions import ClassificationError, ValidationError
 from app.orchestrator.pipeline import (
     BackendIntegration,
-    ClassificationError,
     FeedbackCoach,
     Pipeline,
-    ValidationError,
     VolumeEstimator,
 )
 from app.schemas.bin_color import BinColor

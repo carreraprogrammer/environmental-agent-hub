@@ -18,8 +18,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.exceptions import ClassificationError, ValidationError
 from app.main import app
-from app.orchestrator.pipeline import ClassificationError, ValidationError
 from app.schemas.bin_color import BinColor
 from app.schemas.classification import Material
 from app.schemas.responses import ClassifyResponse, ResponseMeta
