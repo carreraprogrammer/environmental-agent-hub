@@ -33,10 +33,16 @@ from pydantic import ValidationError as PydanticValidationError
 from app.agents.fast_classifier import FastClassifier
 from app.api.dependencies import get_pipeline, get_s3_service
 from app.core.config import settings
+from app.core.exceptions import (
+    AgentTimeoutError,
+    CircuitBreakerOpenError,
+    ClassificationError,
+    ValidationError,
+)
 from app.core.logging import logger
 from app.factories.classifier_factory import ClassifierFactory
 from app.orchestrator.fast_pipeline import ValidationPipeline
-from app.orchestrator.pipeline import ClassificationError, Pipeline, ValidationError
+from app.orchestrator.pipeline import Pipeline
 from app.schemas.requests import ClassifyRequest, ClassifyRequestForm
 from app.schemas.responses import ClassifyResponse
 from app.services.s3_service import S3Service
@@ -371,43 +377,70 @@ async def classify_waste(
 
         return result
 
+    # ========================================
+    # ERROR HANDLERS (mapped to HTTP codes)
+    # ========================================
+
     except ValidationError as e:
-        # Pipeline validation errors (400-level)
+        # Validation errors → HTTP 400
         elapsed_ms = int((time.time() - start_time) * 1000)
 
         logger.warning(
-            "classify_request_rejected",
+            "classify_request_validation_error",
+            trace_id=request_trace_id if "request_trace_id" in locals() else "unknown",
             error_code=e.error_code,
-            message=e.message,
-            suggestion=e.suggestion,
             latency_ms=elapsed_ms,
         )
 
         raise HTTPException(
             status_code=400,
-            detail={
-                "error_code": e.error_code,
-                "message": e.message,
-                "suggestion": e.suggestion,
-            },
+            detail=e.to_dict(),
         ) from e
 
-    except TimeoutError as e:
-        # Pipeline timeout (504)
+    except CircuitBreakerOpenError as e:
+        # Circuit breaker open → HTTP 503
         elapsed_ms = int((time.time() - start_time) * 1000)
 
         logger.error(
-            "classify_request_timeout",
+            "classify_request_circuit_breaker_open",
+            trace_id=request_trace_id if "request_trace_id" in locals() else "unknown",
+            service=e.details.get("service"),
             latency_ms=elapsed_ms,
-            error=str(e),
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "SERVICE_TEMPORARILY_UNAVAILABLE",
+                "message": f"Service {e.details.get('service')} is temporarily unavailable",
+                "details": {
+                    "cooldown_seconds": e.details.get("cooldown_seconds"),
+                    "retry_after": e.details.get("cooldown_seconds"),
+                },
+                "severity": e.severity.value,
+                "recoverable": e.recoverable,
+            },
+        ) from e
+
+    except AgentTimeoutError as e:
+        # Agent timeout → HTTP 504
+        elapsed_ms = int((time.time() - start_time) * 1000)
+
+        logger.error(
+            "classify_request_agent_timeout",
+            trace_id=request_trace_id if "request_trace_id" in locals() else "unknown",
+            agent=e.agent_name,
+            latency_ms=elapsed_ms,
         )
 
         raise HTTPException(
             status_code=504,
             detail={
-                "error_code": "TIMEOUT",
-                "message": "Classification request timeout exceeded",
-                "suggestion": "Please try again with a clearer image",
+                "error": "GATEWAY_TIMEOUT",
+                "message": f"Request timeout at agent: {e.agent_name}",
+                "details": e.details,
+                "severity": e.severity.value,
+                "recoverable": e.recoverable,
             },
         ) from e
 
@@ -416,41 +449,39 @@ async def classify_waste(
         raise
 
     except ClassificationError as e:
-        # Pipeline classification errors (500-level)
+        # Classification errors → HTTP 500
         elapsed_ms = int((time.time() - start_time) * 1000)
 
-        logger.exception(
-            "classify_request_failed",
+        logger.error(
+            "classify_request_classification_error",
+            trace_id=request_trace_id if "request_trace_id" in locals() else "unknown",
+            error_code=e.error_code,
             latency_ms=elapsed_ms,
-            error=str(e),
-            error_type=type(e).__name__,
         )
 
         raise HTTPException(
             status_code=500,
-            detail={
-                "error_code": "CLASSIFICATION_ERROR",
-                "message": "Classification failed due to internal error",
-                "suggestion": "Please try again later or contact support",
-            },
+            detail=e.to_dict(),
         ) from e
 
     except Exception as e:  # pylint: disable=broad-exception-caught
-        # Unexpected errors (500)
+        # Unexpected errors → HTTP 500 (generic message, no internal details)
         elapsed_ms = int((time.time() - start_time) * 1000)
 
         logger.exception(
-            "classify_request_failed",
+            "classify_request_unexpected_error",
+            trace_id=request_trace_id if "request_trace_id" in locals() else "unknown",
             latency_ms=elapsed_ms,
-            error=str(e),
-            error_type=type(e).__name__,
+            exception_type=type(e).__name__,
         )
 
         raise HTTPException(
             status_code=500,
             detail={
-                "error_code": "INTERNAL_ERROR",
-                "message": "Internal server error occurred",
-                "suggestion": "Please try again later or contact support",
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred",
+                "details": {},  # Do NOT expose internal details in production
+                "severity": "high",
+                "recoverable": False,
             },
         ) from e
