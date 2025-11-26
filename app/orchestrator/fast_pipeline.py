@@ -29,6 +29,7 @@ from app.orchestrator.pipeline import Pipeline
 from app.schemas.classification import Material
 from app.schemas.requests import ClassifyRequestForm
 from app.schemas.responses import ClassifyResponse
+from app.services.discrepancy_tracker import DiscrepancyTracker
 
 
 class ValidationPipeline:
@@ -46,12 +47,13 @@ class ValidationPipeline:
     def __init__(self, main_pipeline: Pipeline) -> None:
         """
         Initialize validation pipeline.
-        
+
         Args:
             main_pipeline: Main classification pipeline (Gemini/GPT-4o)
         """
         self.main_pipeline = main_pipeline
-        
+        self.discrepancy_tracker = DiscrepancyTracker()
+
         logger.info(
             "validation_pipeline_initialized",
             component="ValidationPipeline",
@@ -87,11 +89,26 @@ class ValidationPipeline:
         try:
             # 1. Run full classification pipeline
             full_response = await self.main_pipeline.process(request)
-            
-            # 2. Compare results
+
+            # 2. Track discrepancy (sends to backend if materials differ)
+            await self.discrepancy_tracker.track(
+                trace_id=trace_id,
+                fast_path_material=fast_result["material"],
+                fast_path_confidence=fast_result["confidence"],
+                fast_path_model="roboflow/waste-classifier-louut-b9sot",
+                ground_truth_material=full_response.material,
+                ground_truth_confidence=full_response.confidence,
+                ground_truth_model=full_response.meta.model_used,
+                scan_id=str(request.scan_id) if request.scan_id else None,
+                tenant_id=request.tenant_id,
+                station_id=request.station_id,
+                image_url=None,  # TODO: Add S3 URL when available
+            )
+
+            # 3. Compare results
             comparison = self._compare_results(fast_result, full_response)
-            
-            # 3. Log if mismatch
+
+            # 4. Log if mismatch (legacy logging - kept for backward compatibility)
             if not comparison["agreement"]:
                 logger.warning(
                     "classification_mismatch_detected",
@@ -102,8 +119,8 @@ class ValidationPipeline:
                     validated_confidence=full_response.confidence,
                     confidence_diff=comparison["confidence_diff"],
                 )
-            
-            # 4. Update response metadata with validation info
+
+            # 5. Update response metadata with validation info
             full_response.meta.fast_response_material = fast_result["material"].value
             full_response.meta.validation_agreement = comparison["agreement"]
             full_response.meta.confidence_diff = comparison["confidence_diff"]
