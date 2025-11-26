@@ -147,7 +147,6 @@ async def classify_waste(
 
         if "multipart/form-data" in content_type:
             # MULTIPART FORMAT (preferred)
-            # Parse form data
             form_data = await fastapi_request.form()
             image_file = form_data.get("image")
             scan_id = form_data.get("scan_id")
@@ -174,23 +173,17 @@ async def classify_waste(
                 trace_id=trace_id or "auto-generated",
             )
 
-            # Read image bytes
             image_bytes = await image_file.read()
 
-            # Build ClassifyRequestForm
             try:
-                # Build kwargs dict, excluding None values for optional UUID fields
                 form_kwargs = {
                     "station_id": station_id,  # type: ignore
                     "image_bytes": image_bytes,
                     "tenant_id": tenant_id,  # type: ignore
                 }
 
-                # Add scan_id (convert to UUID if provided)
                 if scan_id:
                     form_kwargs["scan_id"] = UUID(scan_id)
-
-                # Add optional trace_id and idempotency_key only if provided
                 if trace_id:
                     form_kwargs["trace_id"] = UUID(trace_id)
                 if idempotency_key:
@@ -215,11 +208,9 @@ async def classify_waste(
             input_format = "bytes"
             request_trace_id = str(request_data.trace_id)
 
-            # Schedule S3 upload in background (non-blocking)
             background_tasks.add_task(
                 s3_service.upload_image,
                 image_bytes,
-                request_data.scan_id,
                 request_data.tenant_id,
                 request_trace_id,
             )
@@ -257,7 +248,6 @@ async def classify_waste(
                 ) from e
 
         else:
-            # Neither multipart nor JSON provided
             logger.warning(
                 "classify_request_rejected",
                 reason="missing_input",

@@ -52,6 +52,7 @@ from app.schemas.requests import ClassifyRequest, ClassifyRequestForm
 from app.schemas.responses import ClassifyResponse
 from app.services.backend_client import BackendClient
 from app.services.metrics_collector import MetricsCollector
+from app.services.s3_service import S3Service
 
 
 class ValidationError(Exception):
@@ -442,6 +443,9 @@ class Pipeline:
         # Initialize backend integration (post-response)
         self.backend_integration = BackendIntegration()
 
+        # Initialize S3 service for background image uploads
+        self.s3_service = S3Service()
+
         logger.info(
             "pipeline_initialized",
             classifier_adapter=type(self.classifier_adapter).__name__,
@@ -691,6 +695,22 @@ class Pipeline:
         # POST-RESPONSE: BackendIntegration (async, non-blocking)
         # Fire and forget - don't await
         asyncio.create_task(self._send_to_backend(response, request, trace_id))
+
+        # POST-RESPONSE: S3 Image Upload (async, non-blocking)
+        # Upload image to S3 in background if image_bytes available
+        if hasattr(request, "image_bytes") and request.image_bytes:
+            asyncio.create_task(
+                self.s3_service.upload_image(
+                    image_bytes=request.image_bytes,
+                    tenant_id=request.tenant_id,
+                    trace_id=trace_id,
+                )
+            )
+            logger.debug(
+                "s3_upload_task_created",
+                trace_id=trace_id,
+                message="S3 upload scheduled as background task",
+            )
 
         # Record metrics (non-blocking)
         try:
