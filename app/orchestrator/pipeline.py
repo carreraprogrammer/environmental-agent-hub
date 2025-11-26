@@ -44,36 +44,23 @@ from app.agents.material_classifier import MaterialClassifier
 from app.utils.classification.color_mapper import ColorMapper
 from app.utils.classification.response_assembler import ResponseAssembler
 from app.utils.classification.waste_type_matcher import WasteTypeMatcher
+from app.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from app.core.config import settings
+from app.core.exceptions import (
+    AgentTimeoutError,
+    BackendIntegrationError,
+    CircuitBreakerOpenError,
+    ClassificationError,
+    ValidationError,
+)
 from app.core.logging import logger
+from app.core.metrics import MetricsCollector
 from app.factories.classifier_factory import ClassifierFactory
 from app.schemas.classification import Material
 from app.schemas.requests import ClassifyRequest, ClassifyRequestForm
 from app.schemas.responses import ClassifyResponse
 from app.services.backend_client import BackendClient
-from app.services.metrics_collector import MetricsCollector
 from app.services.s3_service import S3Service
-
-
-class ValidationError(Exception):
-    """Raised when validation fails (400-level errors)."""
-
-    def __init__(self, error_code: str, message: str, suggestion: str = ""):
-        """Initialize validation error.
-
-        Args:
-            error_code: Error code (NO_WASTE_DETECTED, LOW_CONFIDENCE, etc.)
-            message: Human-readable error message
-            suggestion: Suggestion for user to fix the issue
-        """
-        self.error_code = error_code
-        self.message = message
-        self.suggestion = suggestion
-        super().__init__(f"{error_code}: {message}")
-
-
-class ClassificationError(Exception):
-    """Raised when classification fails (500-level errors)."""
 
 
 class VolumeEstimator:
@@ -295,6 +282,9 @@ class BackendIntegration:
         """
         Send classification to backend Rails API.
 
+        IMPORTANT: This method handles errors gracefully and does NOT raise
+        exceptions. Backend failures should NOT abort classification.
+
         Args:
             response: Classification response
             request: Original request
@@ -336,13 +326,17 @@ class BackendIntegration:
             return result
 
         except Exception as e:  # pylint: disable=broad-exception-caught
+            # Log as WARNING (not ERROR) - backend failure is NOT critical
             logger.warning(
                 "backend_integration_failed",
                 trace_id=trace_id,
                 agent="BackendIntegration",
                 error=str(e),
                 error_type=type(e).__name__,
+                severity="low",  # NOT critical
             )
+            # Return None - DO NOT raise exception
+            # Classification should continue without backend data
             return None
 
 
@@ -388,6 +382,22 @@ class Pipeline:
 
         # Initialize metrics collector
         self.metrics = MetricsCollector()
+
+        # Initialize circuit breakers for external services
+        circuit_config = CircuitBreakerConfig(
+            failure_threshold=5,
+            success_threshold=2,
+            timeout_seconds=60.0,
+        )
+        self.openai_breaker = CircuitBreaker("openai-api", circuit_config)
+        self.anthropic_breaker = CircuitBreaker("anthropic-api", circuit_config)
+        self.google_breaker = CircuitBreaker("google-api", circuit_config)
+        self.roboflow_breaker = CircuitBreaker("roboflow-api", circuit_config)
+
+        logger.info(
+            "circuit_breakers_initialized",
+            services=["openai-api", "anthropic-api", "google-api", "roboflow-api"],
+        )
 
         # Check if consensus mode is enabled
         if settings.CLASSIFIER_MODEL.lower() == "consensus":
@@ -476,10 +486,10 @@ class Pipeline:
         self, request: ClassifyRequest | ClassifyRequestForm
     ) -> ClassifyResponse:
         """
-        Process classification request through V4 pipeline.
+        Process classification request through V4 pipeline with robust error handling.
 
-        Executes all 7 agents sequentially with error handling and timeouts.
-        BackendIntegration runs post-response asynchronously.
+        Implements comprehensive error handling with circuit breakers, graceful
+        degradation, and metrics recording in finally block (ALWAYS executes).
 
         Args:
             request: Classification request (bytes or URL format)
@@ -489,70 +499,207 @@ class Pipeline:
 
         Raises:
             ValidationError: If image validation fails or confidence too low
-            TimeoutError: If pipeline exceeds timeout
+            AgentTimeoutError: If pipeline exceeds timeout
+            CircuitBreakerOpenError: If circuit breaker is open
             ClassificationError: If classification fails
         """
         start_time = time.time()
         trace_id = str(request.trace_id)
         agents_executed: list[str] = []
-
-        # Detect input format
-        if hasattr(request, "image_bytes") and request.image_bytes:
-            image_data = request.image_bytes
-            input_format = "bytes"
-        elif hasattr(request, "image_url"):
-            image_data = request.image_url
-            input_format = "url"
-        else:
-            raise ValidationError(
-                error_code="INVALID_INPUT",
-                message="Request must include either image_bytes or image_url",
-                suggestion="Provide image data in bytes or URL format",
-            )
-
-        logger.info(
-            "pipeline_started",
-            trace_id=trace_id,
-            input_format=input_format,
-            scan_id=str(request.scan_id),
-            station_id=request.station_id,
-        )
+        success = False
+        error_info: dict[str, Any] | None = None
 
         try:
+            # Detect input format
+            if hasattr(request, "image_bytes") and request.image_bytes:
+                image_data = request.image_bytes
+                input_format = "bytes"
+            elif hasattr(request, "image_url"):
+                image_data = request.image_url
+                input_format = "url"
+            else:
+                raise ValidationError(
+                    message="Request must include either image_bytes or image_url",
+                    error_code="INVALID_INPUT",
+                    details={"suggestion": "Provide image data in bytes or URL format"},
+                )
+
+            logger.info(
+                "pipeline_started",
+                trace_id=trace_id,
+                input_format=input_format,
+                scan_id=str(request.scan_id),
+                station_id=request.station_id,
+            )
+
             # Wrap entire pipeline in global timeout
-            return await asyncio.wait_for(
+            response = await asyncio.wait_for(
                 self._execute_pipeline(
                     image_data, input_format, request, trace_id, start_time, agents_executed
                 ),
                 timeout=self.TOTAL_TIMEOUT,
             )
 
-        except asyncio.TimeoutError as e:
-            elapsed = time.time() - start_time
+            success = True
+            return response
+
+        # ========================================
+        # ERROR HANDLERS (by type)
+        # ========================================
+
+        except ValidationError as e:
+            error_info = {
+                "type": "validation",
+                "code": e.error_code,
+                "message": e.message,
+                "severity": e.severity.value,
+            }
+            logger.warning(
+                "pipeline_validation_error",
+                trace_id=trace_id,
+                **error_info,
+            )
+            # Record error metric
+            self.metrics.record_error(
+                error_type="validation",
+                severity=e.severity.value,
+                recoverable=e.recoverable,
+            )
+            raise  # Re-raise for FastAPI
+
+        except AgentTimeoutError as e:
+            error_info = {
+                "type": "timeout",
+                "agent": e.agent_name,
+                "timeout_seconds": e.timeout_seconds,
+                "severity": e.severity.value,
+            }
             logger.error(
                 "pipeline_timeout",
                 trace_id=trace_id,
-                elapsed_seconds=elapsed,
-                timeout_seconds=self.TOTAL_TIMEOUT,
                 agents_executed=agents_executed,
+                **error_info,
             )
-            raise TimeoutError(
-                f"Pipeline exceeded timeout of {self.TOTAL_TIMEOUT}s (elapsed: {elapsed:.2f}s)"
+            # Record error metric
+            self.metrics.record_error(
+                error_type="timeout",
+                severity=e.severity.value,
+                recoverable=e.recoverable,
+            )
+            raise  # Re-raise for FastAPI
+
+        except asyncio.TimeoutError as e:
+            elapsed = time.time() - start_time
+            error_info = {
+                "type": "timeout",
+                "elapsed_seconds": elapsed,
+                "timeout_seconds": self.TOTAL_TIMEOUT,
+            }
+            logger.error(
+                "pipeline_global_timeout",
+                trace_id=trace_id,
+                agents_executed=agents_executed,
+                **error_info,
+            )
+            # Convert to AgentTimeoutError for consistent handling
+            raise AgentTimeoutError(
+                agent_name="Pipeline",
+                timeout_seconds=self.TOTAL_TIMEOUT,
+                message=f"Pipeline exceeded timeout of {self.TOTAL_TIMEOUT}s (elapsed: {elapsed:.2f}s)",
             ) from e
 
-        except ValidationError:
-            # Re-raise validation errors as-is
-            raise
+        except CircuitBreakerOpenError as e:
+            error_info = {
+                "type": "circuit_breaker",
+                "service": e.details.get("service"),
+                "failure_count": e.details.get("failure_count"),
+                "severity": e.severity.value,
+            }
+            logger.error(
+                "pipeline_circuit_breaker_open",
+                trace_id=trace_id,
+                agents_executed=agents_executed,
+                **error_info,
+            )
+            # Record error metric
+            self.metrics.record_error(
+                error_type="circuit_breaker",
+                severity=e.severity.value,
+                recoverable=e.recoverable,
+            )
+            raise  # Re-raise for FastAPI
+
+        except ClassificationError as e:
+            error_info = {
+                "type": "classification",
+                "code": e.error_code,
+                "message": e.message,
+                "severity": e.severity.value,
+                "recoverable": e.recoverable,
+            }
+            logger.error(
+                "pipeline_classification_error",
+                trace_id=trace_id,
+                agents_executed=agents_executed,
+                **error_info,
+            )
+            # Record error metric
+            self.metrics.record_error(
+                error_type="classification",
+                severity=e.severity.value,
+                recoverable=e.recoverable,
+            )
+            raise  # Re-raise for FastAPI
 
         except Exception as e:
+            error_info = {
+                "type": "unexpected",
+                "exception": type(e).__name__,
+                "message": str(e),
+            }
             logger.exception(
-                "pipeline_error",
+                "pipeline_unexpected_error",
                 trace_id=trace_id,
-                error=str(e),
-                error_type=type(e).__name__,
                 agents_executed=agents_executed,
+                **error_info,
             )
-            raise ClassificationError(f"Pipeline failed: {e}") from e
+            # Record error metric
+            self.metrics.record_error(
+                error_type="unexpected",
+                severity="high",
+                recoverable=False,
+            )
+            # Wrap in ClassificationError
+            raise ClassificationError(
+                message=f"Pipeline failed: {e}",
+                error_code="INTERNAL_ERROR",
+                details={"original_exception": type(e).__name__},
+            ) from e
+
+        # ========================================
+        # FINALLY: ALWAYS record metrics
+        # ========================================
+        finally:
+            elapsed_ms = (time.time() - start_time) * 1000
+
+            logger.info(
+                "pipeline_completed",
+                trace_id=trace_id,
+                latency_ms=elapsed_ms,
+                success=success,
+                agents_executed_count=len(agents_executed),
+                agents=agents_executed,
+                error=error_info,
+            )
+
+            # Record metrics for observability (ALWAYS executes)
+            self.metrics.record_pipeline_execution(
+                trace_id=trace_id,
+                latency_ms=elapsed_ms,
+                success=success,
+                agents_executed=agents_executed,
+                error_type=error_info["type"] if error_info else None,
+            )
 
     async def _execute_pipeline(  # pylint: disable=too-many-locals
         self,
