@@ -94,7 +94,7 @@ class TestPipelineLatency:
             mock_classify.side_effect = fast_classify
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 start = time.time()
                 response = await pipeline.process(mock_request)
@@ -129,7 +129,7 @@ class TestPipelineLatency:
                 mock_classify.side_effect = fast_classify
 
                 with patch.object(
-                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                    pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
                 ):
                     start = time.time()
                     await pipeline.process(mock_request)
@@ -183,7 +183,7 @@ class TestPipelineLatency:
             mock_classify.side_effect = timed_classify
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 await pipeline.process(mock_request)
 
@@ -213,7 +213,7 @@ class TestPipelineLatency:
             mock_classify.return_value = mock_classification_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 response = await pipeline.process(mock_request)
 
@@ -227,8 +227,8 @@ class TestPipelineLatency:
                 expected_agents = [
                     "MaterialClassifier",
                     "VolumeEstimator",
-                    "Mapper",
-                    "WasteTypeMapper",
+                    "ColorMapper",
+                    "WasteTypeMatcher",
                     "FeedbackCoach",
                 ]
 
@@ -261,7 +261,7 @@ class TestPipelineLatency:
             mock_classify.return_value = mock_classification_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 response = await pipeline.process(mock_request)
 
@@ -291,7 +291,7 @@ class TestPipelineLatency:
             mock_classify.side_effect = fast_classify
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 # Process 5 concurrent requests
                 tasks = []
@@ -345,7 +345,7 @@ class TestPipelineLatency:
             mock_classify.return_value = mock_classification_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 start = time.time()
                 response = await pipeline.process(request_bytes)
@@ -388,7 +388,7 @@ class TestPipelineStressTest:
                 mock_classify.return_value = mock_classification_result
 
                 with patch.object(
-                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                    pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
                 ):
                     try:
                         await pipeline.process(request)

@@ -55,20 +55,17 @@ class TestClassifierFactoryCreate:
         assert adapter is not None
         assert adapter.model_provider == "google"
 
-    @patch("app.adapters.roboflow_adapter.Roboflow")
-    def test_create_roboflow_adapter(self, mock_roboflow):
+    @patch("app.adapters.roboflow_adapter.InferenceHTTPClient")
+    def test_create_roboflow_adapter(self, mock_inference_client):
         """Test creating Roboflow adapter."""
         from app.core.config import settings
 
         settings.ROBOFLOW_API_KEY = "test-key"
         settings.ROBOFLOW_MODEL_ID = "workspace/project/1"
 
-        # Mock the Roboflow client chain
-        mock_client = mock_roboflow.return_value
-        mock_workspace = mock_client.workspace.return_value
-        mock_project = mock_workspace.project.return_value
-        mock_version = mock_project.version.return_value
-        mock_version.model = "mock_model"
+        # Mock the InferenceHTTPClient
+        mock_client = mock_inference_client.return_value
+        mock_client.infer.return_value = {"predictions": []}
 
         adapter = ClassifierFactory.create(model_override="roboflow")
 
@@ -176,20 +173,17 @@ class TestClassifierFactoryIntegration:
 
         assert isinstance(adapter, AnthropicAdapter)
 
-    @patch("app.adapters.roboflow_adapter.Roboflow")
-    def test_integration_create_roboflow_adapter(self, mock_roboflow):
+    @patch("app.adapters.roboflow_adapter.InferenceHTTPClient")
+    def test_integration_create_roboflow_adapter(self, mock_inference_client):
         """Test integration with real RoboflowClassifierAdapter class."""
         from app.core.config import settings
 
         settings.ROBOFLOW_API_KEY = "test-key"
         settings.ROBOFLOW_MODEL_ID = "workspace/project/1"
 
-        # Mock the Roboflow client chain
-        mock_client = mock_roboflow.return_value
-        mock_workspace = mock_client.workspace.return_value
-        mock_project = mock_workspace.project.return_value
-        mock_version = mock_project.version.return_value
-        mock_version.model = "mock_model"
+        # Mock the InferenceHTTPClient
+        mock_client = mock_inference_client.return_value
+        mock_client.infer.return_value = {"predictions": []}
 
         adapter = ClassifierFactory.create(model_override="roboflow")
 

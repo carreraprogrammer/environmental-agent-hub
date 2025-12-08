@@ -97,6 +97,10 @@ class Settings(BaseSettings):
 
     # Anthropic Configuration (Optional)
     ANTHROPIC_API_KEY: str | None = Field(default=None)
+    ANTHROPIC_MODEL: str | None = Field(
+        default="claude-3-5-sonnet-20241022",
+        description="Anthropic Claude model to use",
+    )
 
     # AWS S3 Configuration (Optional - for background image uploads)
     # Supports S3-compatible services: AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces

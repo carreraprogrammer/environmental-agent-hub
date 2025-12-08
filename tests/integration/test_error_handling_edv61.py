@@ -230,11 +230,16 @@ class TestFastAPIErrorMapping:
 
     def test_validation_error_returns_400(self):
         """Test that ValidationError is mapped to HTTP 400."""
-        with patch("app.api.endpoints.classify.get_pipeline") as mock_pipeline:
-            mock_pipeline.return_value.process.side_effect = ValidationError(
-                "No waste detected", error_code="NO_WASTE_DETECTED"
-            )
-
+        from app.api.dependencies import get_pipeline
+        
+        mock_pipeline = MagicMock()
+        mock_pipeline.process.side_effect = ValidationError(
+            "No waste detected", error_code="NO_WASTE_DETECTED"
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
             response = client.post(
                 "/api/v1/classify",
                 json={
@@ -249,14 +254,21 @@ class TestFastAPIErrorMapping:
             data = response.json()
             # Acepta ambos formatos
             assert data["detail"]["error"] in ["NO_WASTE_DETECTED", "VALIDATION_ERROR"]
+        finally:
+            app.dependency_overrides.clear()
 
     def test_circuit_breaker_open_returns_503(self):
         """Test that CircuitBreakerOpenError is mapped to HTTP 503."""
-        with patch("app.api.endpoints.classify.get_pipeline") as mock_pipeline:
-            mock_pipeline.return_value.process.side_effect = CircuitBreakerOpenError(
-                service_name="openai-api", failure_count=5, cooldown_seconds=60.0
-            )
-
+        from app.api.dependencies import get_pipeline
+        
+        mock_pipeline = MagicMock()
+        mock_pipeline.process.side_effect = CircuitBreakerOpenError(
+            service_name="openai-api", failure_count=5, cooldown_seconds=60.0
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
             response = client.post(
                 "/api/v1/classify",
                 json={
@@ -270,14 +282,21 @@ class TestFastAPIErrorMapping:
             assert response.status_code == 503
             data = response.json()
             assert "SERVICE_TEMPORARILY_UNAVAILABLE" in data["detail"]["error"]
+        finally:
+            app.dependency_overrides.clear()
 
     def test_timeout_error_returns_504(self):
         """Test that AgentTimeoutError is mapped to HTTP 504."""
-        with patch("app.api.endpoints.classify.get_pipeline") as mock_pipeline:
-            mock_pipeline.return_value.process.side_effect = AgentTimeoutError(
-                agent_name="MaterialClassifier", timeout_seconds=10.0
-            )
-
+        from app.api.dependencies import get_pipeline
+        
+        mock_pipeline = MagicMock()
+        mock_pipeline.process.side_effect = AgentTimeoutError(
+            agent_name="MaterialClassifier", timeout_seconds=10.0
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
             response = client.post(
                 "/api/v1/classify",
                 json={
@@ -291,14 +310,21 @@ class TestFastAPIErrorMapping:
             assert response.status_code == 504
             data = response.json()
             assert data["detail"]["error"] == "GATEWAY_TIMEOUT"
+        finally:
+            app.dependency_overrides.clear()
 
     def test_classification_error_returns_500(self):
         """Test that ClassificationError is mapped to HTTP 500."""
-        with patch("app.api.endpoints.classify.get_pipeline") as mock_pipeline:
-            mock_pipeline.return_value.process.side_effect = ClassificationError(
-                "Classification failed"
-            )
-
+        from app.api.dependencies import get_pipeline
+        
+        mock_pipeline = MagicMock()
+        mock_pipeline.process.side_effect = ClassificationError(
+            "Classification failed"
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
             response = client.post(
                 "/api/v1/classify",
                 json={
@@ -312,14 +338,21 @@ class TestFastAPIErrorMapping:
             assert response.status_code == 500
             data = response.json()
             assert data["detail"]["error"] == "CLASSIFICATION_ERROR"
+        finally:
+            app.dependency_overrides.clear()
 
     def test_unexpected_error_returns_500_without_details(self):
         """Test that unexpected errors return HTTP 500 without internal details."""
-        with patch("app.api.endpoints.classify.get_pipeline") as mock_pipeline:
-            mock_pipeline.return_value.process.side_effect = RuntimeError(
-                "Internal error with sensitive data"
-            )
-
+        from app.api.dependencies import get_pipeline
+        
+        mock_pipeline = MagicMock()
+        mock_pipeline.process.side_effect = RuntimeError(
+            "Internal error with sensitive data"
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
             response = client.post(
                 "/api/v1/classify",
                 json={
@@ -340,6 +373,8 @@ class TestFastAPIErrorMapping:
                 "Pipeline failed",
             ] or "Pipeline failed" in data["detail"]["message"]
             # Verify no sensitive data exposed
+        finally:
+            app.dependency_overrides.clear()
             assert "sensitive data" not in str(data)
             assert data["detail"]["details"] == {} or "details" not in data["detail"]
 

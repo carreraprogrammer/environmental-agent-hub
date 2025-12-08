@@ -52,6 +52,7 @@ class Mapper:
         # ORGANICS (GREEN) - Compostable
         Material.ORGANIC: BinColor.GREEN,
         # REJECT (BLACK) - Non-recyclable
+        Material.NO_WASTE: BinColor.BLACK,
         Material.OTHER: BinColor.BLACK,
     }
 
