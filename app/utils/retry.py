@@ -132,14 +132,16 @@ def with_retry(
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> T:  # type: ignore
+            # Create a lambda that captures the function call with its arguments
+            async def execute_func():
+                return await func(*args, **kwargs)
+            
             return await retry_with_backoff(
-                func,
+                execute_func,
                 max_attempts=max_attempts,
                 initial_delay=initial_delay,
                 max_delay=max_delay,
                 retryable_exceptions=retryable_exceptions,
-                *args,
-                **kwargs,
             )
 
         return wrapper  # type: ignore

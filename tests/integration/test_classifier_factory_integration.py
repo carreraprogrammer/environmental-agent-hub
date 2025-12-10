@@ -67,8 +67,8 @@ async def test_factory_gemini_integration():
 
 
 @pytest.mark.asyncio
-@patch("app.adapters.roboflow_adapter.Roboflow")
-async def test_factory_model_switching(mock_roboflow):
+@patch("app.adapters.roboflow_adapter.InferenceHTTPClient")
+async def test_factory_model_switching(mock_inference_client):
     """Test that factory can switch between different models without code changes."""
     from app.core.config import settings
 
@@ -81,20 +81,17 @@ async def test_factory_model_switching(mock_roboflow):
     adapter2 = ClassifierFactory.create(model_override="gemini")
     assert "google" in adapter2.model_provider
 
-    # Stub Roboflow client chain to avoid network
-    mock_client = mock_roboflow.return_value
-    mock_workspace = mock_client.workspace.return_value
-    mock_project = mock_workspace.project.return_value
-    mock_version = mock_project.version.return_value
-    mock_version.model = "mock_model"
+    # Mock InferenceHTTPClient to avoid network
+    mock_client = mock_inference_client.return_value
+    mock_client.infer.return_value = {"predictions": []}
 
     adapter3 = ClassifierFactory.create(model_override="roboflow")
     assert "roboflow" in adapter3.model_provider
 
 
 @pytest.mark.asyncio
-@patch("app.adapters.roboflow_adapter.Roboflow")
-async def test_factory_all_adapters_consistent_interface(mock_roboflow):
+@patch("app.adapters.roboflow_adapter.InferenceHTTPClient")
+async def test_factory_all_adapters_consistent_interface(mock_inference_client):
     """Test that all adapters created by factory have consistent interface."""
     model_ids = ClassifierFactory.list_available()
 
@@ -103,12 +100,9 @@ async def test_factory_all_adapters_consistent_interface(mock_roboflow):
             # Skip claude as it's not fully implemented
             continue
 
-        # Ensure Roboflow init doesn't call network
-        mock_client = mock_roboflow.return_value
-        mock_workspace = mock_client.workspace.return_value
-        mock_project = mock_workspace.project.return_value
-        mock_version = mock_project.version.return_value
-        mock_version.model = "mock_model"
+        # Mock InferenceHTTPClient to avoid network
+        mock_client = mock_inference_client.return_value
+        mock_client.infer.return_value = {"predictions": []}
 
         adapter = ClassifierFactory.create(model_override=model_id)
 

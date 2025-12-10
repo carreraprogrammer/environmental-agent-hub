@@ -744,14 +744,14 @@ class Pipeline:
             raise ValidationError(
                 error_code="NO_WASTE_DETECTED",
                 message="No se detectó residuo en la imagen",
-                suggestion="Acerca un residuo al encuadre y vuelve a intentar",
+                details={"suggestion": "Acerca un residuo al encuadre y vuelve a intentar"},
             )
 
         if material_confidence < 0.3:
             raise ValidationError(
                 error_code="LOW_CONFIDENCE",
                 message=f"Clasificación con confianza muy baja: {material_confidence:.2f}",
-                suggestion="Mejora la iluminación o acerca más el objeto a la cámara",
+                details={"suggestion": "Mejora la iluminación o acerca más el objeto a la cámara"},
             )
 
         # If confidence is low, optionally downgrade to OTHER (less strict in consensus mode)

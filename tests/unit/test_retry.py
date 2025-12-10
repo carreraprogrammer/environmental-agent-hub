@@ -387,11 +387,20 @@ class TestRetryPerformance:
                 raise Exception(f"Task {task_id} failed")
             return f"success-{task_id}"
 
-        # Run multiple concurrent retry operations using lambdas
+        # Create wrapper functions using functools.partial to properly capture task_id
+        from functools import partial
+        
         tasks = []
         for i in range(5):
+            # Use partial to bind the task_id parameter
+            func_with_id = partial(flaky_func, i)
+            
+            # Create async wrapper
+            async def wrapper(f=func_with_id):
+                return await f()
+            
             task = retry_with_backoff(
-                lambda task_id=i: flaky_func(task_id),
+                wrapper,
                 max_attempts=2,
                 initial_delay=0.01,
             )
@@ -405,5 +414,6 @@ class TestRetryPerformance:
         error_count = sum(1 for r in results if isinstance(r, Exception))
 
         # Odd task_ids should succeed, even should fail
-        assert success_count == 3  # task_ids: 1, 3, 4
-        assert error_count == 2  # task_ids: 0, 2
+        # task_ids: 0(even-fail), 1(odd-success), 2(even-fail), 3(odd-success), 4(even-fail)
+        assert success_count == 2  # task_ids: 1, 3
+        assert error_count == 3  # task_ids: 0, 2, 4

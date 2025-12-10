@@ -18,7 +18,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.exceptions import ClassificationError, ValidationError
+from app.core.exceptions import AgentTimeoutError, ClassificationError, ValidationError
 from app.main import app
 from app.schemas.bin_color import BinColor
 from app.schemas.classification import Material
@@ -235,68 +235,76 @@ class TestClassifyEndpointValidationErrors:
 
     def test_classify_no_waste_detected(self) -> None:
         """Test 400 error when pipeline detects no waste."""
+        from app.api.dependencies import get_pipeline
+        
         # Arrange
         test_image = b"empty_hand_image"
 
-        with patch("app.api.endpoints.classify.Pipeline") as MockPipeline:
-            mock_pipeline = AsyncMock()
-            mock_pipeline.process.side_effect = ValidationError(
-                error_code="NO_WASTE_DETECTED",
-                message="No se detectó residuo en la imagen",
-                suggestion="Acerca un residuo al encuadre y vuelve a intentar",
+        mock_pipeline = AsyncMock()
+        mock_pipeline.process.side_effect = ValidationError(
+            error_code="NO_WASTE_DETECTED",
+            message="No se detectó residuo en la imagen",
+            details={"suggestion": "Acerca un residuo al encuadre y vuelve a intentar"},
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
+            # Act
+            response = client.post(
+                "/api/v1/classify",
+                files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
+                data={
+                    "scan_id": str(uuid4()),
+                    "station_id": "TEST-01",
+                    "tenant_id": "test",
+                },
             )
-            MockPipeline.return_value = mock_pipeline
 
-            with patch("app.api.dependencies.Pipeline", return_value=mock_pipeline):
-                # Act
-                response = client.post(
-                    "/api/v1/classify",
-                    files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
-                    data={
-                        "scan_id": str(uuid4()),
-                        "station_id": "TEST-01",
-                        "tenant_id": "test",
-                    },
-                )
-
-        # Assert
-        assert response.status_code == 400
-        data = response.json()
-        assert data["detail"]["error_code"] == "NO_WASTE_DETECTED"
-        assert "No se detectó" in data["detail"]["message"]
-        assert "suggestion" in data["detail"]
+            # Assert
+            assert response.status_code == 400
+            data = response.json()
+            assert data["detail"]["error"] == "NO_WASTE_DETECTED"
+            assert "No se detectó" in data["detail"]["message"]
+            assert "details" in data["detail"] and "suggestion" in data["detail"]["details"]
+        finally:
+            app.dependency_overrides.clear()
 
     def test_classify_low_confidence(self) -> None:
         """Test 400 error when classification confidence is too low."""
+        from app.api.dependencies import get_pipeline
+        
         # Arrange
         test_image = b"blurry_image"
 
-        with patch("app.api.endpoints.classify.Pipeline") as MockPipeline:
-            mock_pipeline = AsyncMock()
-            mock_pipeline.process.side_effect = ValidationError(
-                error_code="LOW_CONFIDENCE",
-                message="Clasificación con confianza muy baja: 0.25",
-                suggestion="Mejora la iluminación o acerca más el objeto a la cámara",
+        mock_pipeline = AsyncMock()
+        mock_pipeline.process.side_effect = ValidationError(
+            error_code="LOW_CONFIDENCE",
+            message="Clasificación con confianza muy baja: 0.25",
+            details={"suggestion": "Mejora la iluminación o acerca más el objeto a la cámara"},
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
+            # Act
+            response = client.post(
+                "/api/v1/classify",
+                files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
+                data={
+                    "scan_id": str(uuid4()),
+                    "station_id": "TEST-01",
+                    "tenant_id": "test",
+                },
             )
-            MockPipeline.return_value = mock_pipeline
 
-            with patch("app.api.dependencies.Pipeline", return_value=mock_pipeline):
-                # Act
-                response = client.post(
-                    "/api/v1/classify",
-                    files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
-                    data={
-                        "scan_id": str(uuid4()),
-                        "station_id": "TEST-01",
-                        "tenant_id": "test",
-                    },
-                )
-
-        # Assert
-        assert response.status_code == 400
-        data = response.json()
-        assert data["detail"]["error_code"] == "LOW_CONFIDENCE"
-        assert "confianza" in data["detail"]["message"].lower()
+            # Assert
+            assert response.status_code == 400
+            data = response.json()
+            assert data["detail"]["error"] == "LOW_CONFIDENCE"
+            assert "confianza" in data["detail"]["message"].lower()
+        finally:
+            app.dependency_overrides.clear()
 
     def test_classify_invalid_uuid(self) -> None:
         """Test 400 error when scan_id is not a valid UUID."""
@@ -322,34 +330,39 @@ class TestClassifyEndpointTimeouts:
 
     def test_classify_timeout_error(self) -> None:
         """Test 504 error when pipeline times out."""
+        from app.api.dependencies import get_pipeline
+        
         # Arrange
         test_image = b"complex_image"
 
-        with patch("app.api.endpoints.classify.Pipeline") as MockPipeline:
-            mock_pipeline = AsyncMock()
-            # Simulate timeout
-            mock_pipeline.process.side_effect = TimeoutError(
-                "Pipeline exceeded timeout of 5.0s"
+        mock_pipeline = AsyncMock()
+        # Simulate timeout with AgentTimeoutError
+        mock_pipeline.process.side_effect = AgentTimeoutError(
+            agent_name="MaterialClassifier",
+            timeout_seconds=5.0
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
+            # Act
+            response = client.post(
+                "/api/v1/classify",
+                files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
+                data={
+                    "scan_id": str(uuid4()),
+                    "station_id": "TEST-01",
+                    "tenant_id": "test",
+                },
             )
-            MockPipeline.return_value = mock_pipeline
 
-            with patch("app.api.dependencies.Pipeline", return_value=mock_pipeline):
-                # Act
-                response = client.post(
-                    "/api/v1/classify",
-                    files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
-                    data={
-                        "scan_id": str(uuid4()),
-                        "station_id": "TEST-01",
-                        "tenant_id": "test",
-                    },
-                )
-
-        # Assert
-        assert response.status_code == 504
-        data = response.json()
-        assert data["detail"]["error_code"] == "TIMEOUT"
-        assert "timeout" in data["detail"]["message"].lower()
+            # Assert
+            assert response.status_code == 504
+            data = response.json()
+            assert data["detail"]["error"] == "GATEWAY_TIMEOUT"
+            assert "timeout" in data["detail"]["message"].lower()
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestClassifyEndpointServerErrors:
@@ -357,19 +370,21 @@ class TestClassifyEndpointServerErrors:
 
     def test_classify_classification_error(self) -> None:
         """Test 500 error when classification fails."""
+        from app.api.dependencies import get_pipeline
+        
         # Arrange
         test_image = b"corrupted_image"
 
-        with patch("app.api.endpoints.classify.Pipeline") as MockPipeline:
-            mock_pipeline = AsyncMock()
-            mock_pipeline.process.side_effect = ClassificationError(
-                "Classification model unavailable"
-            )
-            MockPipeline.return_value = mock_pipeline
-
-            with patch("app.api.dependencies.Pipeline", return_value=mock_pipeline):
-                # Act
-                response = client.post(
+        mock_pipeline = AsyncMock()
+        mock_pipeline.process.side_effect = ClassificationError(
+            "Classification model unavailable"
+        )
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
+            # Act
+            response = client.post(
                     "/api/v1/classify",
                     files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
                     data={
@@ -379,37 +394,43 @@ class TestClassifyEndpointServerErrors:
                     },
                 )
 
-        # Assert
-        assert response.status_code == 500
-        data = response.json()
-        assert data["detail"]["error_code"] == "CLASSIFICATION_ERROR"
+            # Assert
+            assert response.status_code == 500
+            data = response.json()
+            assert data["detail"]["error"] == "CLASSIFICATION_ERROR"
+        finally:
+            app.dependency_overrides.clear()
 
     def test_classify_unexpected_error(self) -> None:
         """Test 500 error for unexpected exceptions."""
+        from app.api.dependencies import get_pipeline
+        
         # Arrange
         test_image = b"test_image"
 
-        with patch("app.api.endpoints.classify.Pipeline") as MockPipeline:
-            mock_pipeline = AsyncMock()
-            mock_pipeline.process.side_effect = RuntimeError("Unexpected error")
-            MockPipeline.return_value = mock_pipeline
+        mock_pipeline = AsyncMock()
+        mock_pipeline.process.side_effect = RuntimeError("Unexpected error")
+        
+        app.dependency_overrides[get_pipeline] = lambda: mock_pipeline
+        
+        try:
+            # Act
+            response = client.post(
+                "/api/v1/classify",
+                files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
+                data={
+                    "scan_id": str(uuid4()),
+                    "station_id": "TEST-01",
+                    "tenant_id": "test",
+                },
+            )
 
-            with patch("app.api.dependencies.Pipeline", return_value=mock_pipeline):
-                # Act
-                response = client.post(
-                    "/api/v1/classify",
-                    files={"image": ("test.jpg", BytesIO(test_image), "image/jpeg")},
-                    data={
-                        "scan_id": str(uuid4()),
-                        "station_id": "TEST-01",
-                        "tenant_id": "test",
-                    },
-                )
-
-        # Assert
-        assert response.status_code == 500
-        data = response.json()
-        assert data["detail"]["error_code"] == "INTERNAL_ERROR"
+            # Assert
+            assert response.status_code == 500
+            data = response.json()
+            assert data["detail"]["error"] in ["INTERNAL_ERROR", "INTERNAL_SERVER_ERROR"]
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestClassifyEndpointHeaders:

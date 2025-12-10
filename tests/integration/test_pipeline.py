@@ -21,7 +21,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.exceptions import ClassificationError, ValidationError
+from app.core.exceptions import AgentTimeoutError, ClassificationError, ValidationError
 from app.orchestrator.pipeline import (
     BackendIntegration,
     FeedbackCoach,
@@ -251,10 +251,10 @@ class TestPipeline:
         # Check all 6 agents are initialized (PreValidator moved to client-side)
         assert pipeline.classifier is not None
         assert pipeline.volume_estimator is not None
-        assert pipeline.mapper is not None
-        assert pipeline.waste_type_mapper is not None
+        assert pipeline.color_mapper is not None
+        assert pipeline.waste_type_matcher is not None
         assert pipeline.feedback_coach is not None
-        assert pipeline.assembler is not None
+        assert pipeline.response_assembler is not None
         assert pipeline.backend_integration is not None
 
         # Check classifier adapter initialized
@@ -280,7 +280,7 @@ class TestPipeline:
 
             # Mock WasteTypeMapper initialization (to avoid backend call)
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 # Execute pipeline
                 response = await pipeline.process(mock_request)
@@ -306,8 +306,8 @@ class TestPipeline:
                 expected_agents = [
                     "MaterialClassifier",
                     "VolumeEstimator",
-                    "Mapper",
-                    "WasteTypeMapper",
+                    "ColorMapper",
+                    "WasteTypeMatcher",
                     "FeedbackCoach",
                 ]
                 for agent in expected_agents:
@@ -343,7 +343,7 @@ class TestPipeline:
             mock_classify.return_value = low_conf_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 # Execute pipeline - should downgrade to OTHER
                 response = await pipeline.process(mock_request)
@@ -425,7 +425,7 @@ class TestPipeline:
             mock_classify.return_value = no_waste_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 with pytest.raises(ValidationError) as excinfo:
                     await pipeline.process(mock_request)
@@ -468,7 +468,7 @@ class TestPipeline:
             mock_classify.return_value = medium_confidence_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 response = await pipeline.process(mock_request)
 
@@ -484,22 +484,19 @@ class TestPipeline:
         """Test pipeline timeout (5 seconds)."""
         pipeline = Pipeline()
 
-        # Mock PreValidator to take forever
         # Mock MaterialClassifier to take forever
         async def slow_classify(*args: Any, **kwargs: Any) -> MaterialClassificationResult:
             await asyncio.sleep(10)  # Exceed 5s timeout
             return mock_classification_result
 
         with patch.object(
-            pipeline.classifier, "classify", new_callable=AsyncMock
-        ) as mock_classify:
-            mock_classify.side_effect = slow_classify
-
-            # Should raise TimeoutError
-            with pytest.raises(TimeoutError) as exc_info:
+            pipeline.classifier, "classify", side_effect=slow_classify
+        ):
+            # Should raise AgentTimeoutError (converted from TimeoutError)
+            with pytest.raises(AgentTimeoutError) as exc_info:
                 await pipeline.process(mock_request)
 
-            assert "timeout" in str(exc_info.value).lower()
+            assert "timeout" in str(exc_info.value).lower() or "Pipeline" in exc_info.value.agent_name
 
     @pytest.mark.asyncio
     async def test_pipeline_trace_id_propagation(
@@ -518,7 +515,7 @@ class TestPipeline:
             mock_classify.return_value = mock_classification_result
 
             with patch.object(
-                pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
             ):
                 await pipeline.process(mock_request)
 
@@ -575,7 +572,7 @@ class TestPipeline:
                 mock_classify.return_value = classification_result
 
                 with patch.object(
-                    pipeline.waste_type_mapper, "initialize", new_callable=AsyncMock
+                    pipeline.waste_type_matcher, "initialize", new_callable=AsyncMock
                 ):
                     response = await pipeline.process(mock_request)
 

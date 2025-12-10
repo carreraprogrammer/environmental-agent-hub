@@ -22,33 +22,30 @@ def configure_settings():
 
 @pytest.fixture
 def adapter_with_model(monkeypatch):
-    model_instance = Mock()
-    version = SimpleNamespace(model=model_instance)
+    """Mock the InferenceHTTPClient instead of old Roboflow SDK."""
+    mock_client = Mock()
 
-    def project_fn(project: str):
-        return SimpleNamespace(version=lambda version_id: version)
-
-    def workspace_fn(workspace: str):
-        return SimpleNamespace(project=project_fn)
-
+    # Mock InferenceHTTPClient constructor
     monkeypatch.setattr(
-        "app.adapters.roboflow_adapter.Roboflow",
-        lambda api_key: SimpleNamespace(workspace=workspace_fn),
+        "app.adapters.roboflow_adapter.InferenceHTTPClient",
+        lambda api_url, api_key: mock_client,
     )
 
     adapter = RoboflowClassifierAdapter("workspace/project/1")
-    adapter.model = model_instance
-    return adapter, model_instance
+    return adapter, mock_client
 
 
 @pytest.mark.asyncio
 async def test_classify_with_prediction(monkeypatch, adapter_with_model):
-    adapter, model = adapter_with_model
+    adapter, mock_client = adapter_with_model
 
-    prediction_response = SimpleNamespace(
-        predictions=[SimpleNamespace(class_name="PET_bottle", confidence=0.92)]
-    )
-    model.predict.return_value = prediction_response
+    # Mock InferenceHTTPClient.infer response
+    prediction_response = {
+        "predictions": [
+            {"class": "PET_bottle", "confidence": 0.92, "class_id": 0}
+        ]
+    }
+    mock_client.infer.return_value = prediction_response
 
     async def fake_to_thread(func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -64,8 +61,10 @@ async def test_classify_with_prediction(monkeypatch, adapter_with_model):
 
 @pytest.mark.asyncio
 async def test_classify_no_predictions(monkeypatch, adapter_with_model):
-    adapter, model = adapter_with_model
-    model.predict.return_value = SimpleNamespace(predictions=[])
+    adapter, mock_client = adapter_with_model
+    
+    # Mock InferenceHTTPClient.infer response with no predictions
+    mock_client.infer.return_value = {"predictions": []}
 
     async def fake_to_thread(func, *args, **kwargs):
         return func(*args, **kwargs)
@@ -81,14 +80,28 @@ async def test_classify_no_predictions(monkeypatch, adapter_with_model):
 def test_map_roboflow_class(adapter_with_model):
     adapter, _ = adapter_with_model
 
+    # Test direct mappings
     assert adapter._map_roboflow_class("plastic") == WasteMaterial.PLASTIC
+    assert adapter._map_roboflow_class("paper") == WasteMaterial.PAPER
+    assert adapter._map_roboflow_class("glass") == WasteMaterial.GLASS
+    assert adapter._map_roboflow_class("metal") == WasteMaterial.METAL
+    assert adapter._map_roboflow_class("organic") == WasteMaterial.ORGANIC
     assert adapter._map_roboflow_class("cardboard") == WasteMaterial.PAPER
-    assert adapter._map_roboflow_class("glass_bottle") == WasteMaterial.GLASS
+    
+    # Test heuristics
+    assert adapter._map_roboflow_class("PET_bottle") == WasteMaterial.PLASTIC
     assert adapter._map_roboflow_class("aluminum_can") == WasteMaterial.METAL
     assert adapter._map_roboflow_class("food_scraps") == WasteMaterial.ORGANIC
     assert adapter._map_roboflow_class("mystery") == WasteMaterial.OTHER
 
 
 def test_invalid_model_id(monkeypatch):
-    with pytest.raises(ValueError):
+    """Test that invalid model_id format raises ValueError."""
+    # Mock InferenceHTTPClient to prevent actual API calls
+    monkeypatch.setattr(
+        "app.adapters.roboflow_adapter.InferenceHTTPClient",
+        lambda api_url, api_key: Mock(),
+    )
+    
+    with pytest.raises(ValueError, match="workspace/project/version"):
         RoboflowClassifierAdapter("invalid")

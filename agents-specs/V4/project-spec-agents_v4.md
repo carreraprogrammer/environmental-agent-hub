@@ -2,13 +2,22 @@
 
 ## 🔄 ACTUALIZACIONES IMPORTANTES
 
-### v4.2 - Fast Path + Consensus Architecture (Dic 2025)
+### v4.2 - Fast Path + Consensus Architecture + Discrepancy Tracking (Dic 2025)
 
 **Fast Path Architecture implementada (RF-016):**
 - ✅ **FastClassifier (Roboflow)** - Clasificación ultra-rápida <1s
 - ✅ **ValidationPipeline** - Gemini valida en background sin bloquear respuesta
 - ✅ **ENABLE_FAST_PATH=true** - Feature flag activo
 - ✅ **Latencia: 570ms (local), 1.8s (Docker)** - Mejora 9-12x vs baseline
+
+**Discrepancy Tracking System implementado (NEW):**
+- ✅ **DiscrepancyTracker** - Detecta mismatches Fast Path vs Ground Truth
+- ✅ **Gemini como fuente de verdad** - Valida clasificaciones de Roboflow
+- ✅ **Auto-genera datasets de corrección** - Para reentrenamiento/fine-tuning
+- ✅ **Fire-and-forget** - Errores de backend no bloquean clasificación
+- ✅ **Structured logging** - Métricas de agreement rate y model drift
+- ✅ **Backend endpoint** - POST /classification_corrections
+- ✅ **100% test coverage** - 24 unit tests passing
 
 **Consensus Architecture implementada (RF-015):**
 - ✅ **ConsensusClassificationAgent** - Ensemble multi-modelo
@@ -25,11 +34,22 @@
 | Fast Path Latency (Docker) | 1801ms | <1000ms ⚠️ |
 
 **Archivos implementados:**
+
+**Fast Path + Consensus:**
 - `app/agents/fast_classifier.py` - FastClassifier
 - `app/orchestrator/fast_pipeline.py` - ValidationPipeline
 - `app/agents/consensus_classifier.py` - ConsensusClassificationAgent
 - `scripts/benchmark_fast_path.py` - Benchmark
 - `scripts/validate_fast_vs_full_pipeline.py` - Validación
+
+**Discrepancy Tracking (NEW):**
+- `app/schemas/discrepancy.py` - DiscrepancyRecord + CorrectionPayload
+- `app/services/discrepancy_tracker.py` - DiscrepancyTracker service
+- `tests/unit/test_discrepancy_tracker.py` - 24 unit tests (100% coverage)
+- `validations/EDV-DISCREPANCY-TRACKING/` - Validation scripts + reports
+  - `validation-script.sh` - Automated validation (48 checks)
+  - `VALIDATION_REPORT.md` - Detailed validation report
+  - `E2E_TEST_RESULTS.md` - End-to-end test results with backend
 
 ### v4.1 - PreValidator movido a cliente (Nov 2025 - EDV-58)
 

@@ -1,15 +1,30 @@
 # Agent Hub - AI Orchestrator V4
 
-Waste classification system with interchangeable AI models (GPT-4, Claude, Gemini) optimized for edge + backend hybrid architecture.
+**Intelligent waste classification system** that combines ultra-fast user feedback with high-precision environmental data collection through a Fast Path + Background Validation architecture.
 
-> **Latest:** V4.0.0 introduces 70% faster classification, 65% cheaper costs, and unified MaterialClassifier. See [CHANGELOG.md](CHANGELOG.md) for details.
+> **Latest:** V4.2 introduces Discrepancy Tracking for automatic model improvement. Fast Path responds in <1s while Gemini validates in background, generating correction datasets for model fine-tuning. See [CHANGELOG.md](CHANGELOG.md) for details.
+
+## 🧠 What is Agent Hub?
+
+Agent Hub is the **brain** of an educational waste classification system. It receives waste images from frontend clients and uses a dual-path architecture to:
+
+1. **⚡ Immediate Response** (<1s): Lightweight model (Roboflow) classifies and educates users in real-time about proper waste sorting
+2. **🎯 Background Validation** (5-7s): Advanced AI (Gemini/GPT-4o) validates and extracts detailed environmental data (material, subtype, volume, condition, recyclability)
+3. **📊 Discrepancy Tracking**: Automatically detects classification mismatches where **Gemini is ground truth**, generating correction datasets for model retraining/fine-tuning
+
+**Result:** Ultra-fast UX without sacrificing data quality, with automatic dataset generation for custom model adaptation per organization.
 
 ## 🎯 Features
 
-- **⚡ Fast Path Mode (NEW)**: Sub-second response times (<1s) with background validation
+- **⚡ Fast Path Mode**: Sub-second response times (<1s) with background validation
   - Immediate response using Roboflow (<800ms)
   - Background validation with Gemini/GPT-4o (100% accuracy maintained)
   - 7x speed improvement while maintaining data quality
+- **📊 Discrepancy Tracking (NEW v4.2)**: Automatic model improvement system
+  - Gemini as ground truth validates Fast Path classifications
+  - Auto-generates correction datasets for model fine-tuning
+  - Fire-and-forget architecture: failures don't block user flow
+  - Structured logging for monitoring model drift
 - **Complete AI Pipeline**: Full classification with MaterialClassifier + consensus support
 - **Interchangeable Models**: Switch between GPT-4o, Gemini 2.5 Flash, Roboflow without code changes
 - **Bytes Processing**: 60% faster latency using image bytes vs URLs (async S3 upload in background)
@@ -202,16 +217,22 @@ railway logs
 
 2. ValidationPipeline (Background) → 5-7s
    ├─→ Run full MaterialClassifier (Gemini/GPT-4o)
-   ├─→ Compare results (agreement check)
-   ├─→ Log mismatches for model improvement
+   ├─→ DiscrepancyTracker.track()
+   │   ├─→ Compare Fast Path vs Ground Truth
+   │   ├─→ If mismatch detected:
+   │   │   ├─→ Log discrepancy with structured data
+   │   │   └─→ POST to /classification_corrections (fire-and-forget)
+   │   └─→ If match: log agreement for metrics
    └─→ Sync validated data to Rails backend
 ```
 
 **Benefits:**
 - **User Experience:** <1s perceived latency (vs 5-7s)
-- **Data Quality:** 100% classifications validated
+- **Data Quality:** 100% classifications validated by Gemini (ground truth)
 - **Cost Efficiency:** $0.001 Roboflow + $0.001 Gemini = $0.002 total
-- **Monitoring:** Automatic mismatch detection for model drift
+- **Model Improvement:** Automatic correction dataset generation
+- **Fire-and-Forget:** Backend failures don't block classification
+- **Monitoring:** Real-time model drift detection and accuracy tracking
 
 #### Standard Pipeline V4 (Full Validation)
 
